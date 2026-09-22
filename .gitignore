@@ -10,3 +10,10 @@ node_modules/
 dist/
 .output/
 .nitro/
+
+# sandbox / QA artifacts
+.grok/
+artifacts/
+screenshots/
+*.log
+.node_modules.lock
