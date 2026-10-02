@@ -263,7 +263,7 @@ function RecipeList({
         РЕЦЕПТЫ
       </h1>
       <p className="mt-2 mb-8 text-sm text-muted">
-        18 блюд в каталоге плюс ваши собственные. КБЖУ на порцию.
+        30 блюд в каталоге плюс ваши собственные. КБЖУ на порцию.
       </p>
       <div className="grid gap-8 sm:grid-cols-2">
         {recipes.map((r) => (
