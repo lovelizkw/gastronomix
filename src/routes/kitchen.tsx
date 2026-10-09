@@ -10,12 +10,26 @@ import {
   listProducts,
   listRecipes,
   removeProduct,
+  type IngredientItem,
   type ProductRow,
   type RecipeRow,
 } from "@/lib/kitchen-api";
 import { matchRecipes } from "@/lib/recipes";
 
 export const Route = createFileRoute("/kitchen")({ component: KitchenPage });
+
+/** Значения формы рецепта, которые отправляются на сервер. */
+export type RecipeFormValues = {
+  title: string;
+  timeLabel: string;
+  portions: number;
+  ingredients: IngredientItem[];
+  instructions: string;
+  kcal: number;
+  protein: number;
+  fat: number;
+  carbs: number;
+};
 
 function KitchenPage() {
   const { user, isPending } = useCurrentUserState();
@@ -65,26 +79,12 @@ function KitchenPage() {
     e.currentTarget.reset();
   }
 
-  async function onCreateRecipe(e: FormEvent<HTMLFormElement>) {
-    e.preventDefault();
-    const data = new FormData(e.currentTarget);
-    const row = await createRecipe({
-      data: {
-        title: String(data.get("title") ?? ""),
-        timeLabel: String(data.get("timeLabel") ?? "30 мин"),
-        ingredients: String(data.get("ingredients") ?? ""),
-        instructions: String(data.get("instructions") ?? ""),
-        kcal: Number(data.get("kcal") || 0),
-        protein: Number(data.get("protein") || 0),
-        fat: Number(data.get("fat") || 0),
-        carbs: Number(data.get("carbs") || 0),
-      },
-    });
+  async function onCreateRecipe(values: RecipeFormValues) {
+    const row = await createRecipe({ data: values });
     if (row) {
       setRecipes((prev) => [row, ...prev]);
       setTab("recipes");
     }
-    e.currentTarget.reset();
   }
 
   return (
@@ -136,7 +136,7 @@ function KitchenPage() {
             }}
           />
         ) : (
-          <CreateForm onSubmit={onCreateRecipe} />
+          <RecipeForm onSubmit={onCreateRecipe} />
         )}
       </div>
 
@@ -287,8 +287,16 @@ function RecipeList({
                 )}
               </div>
               <p className="mt-1 text-sm text-muted">
-                {r.timeLabel} · {r.ingredients.join(", ")}
+                {r.timeLabel} · {r.portions} порц.
               </p>
+              <ul className="mt-3 grid gap-1 text-sm">
+                {r.ingredients.map((ing, i) => (
+                  <li key={i} className="flex justify-between gap-3 border-b border-line/60 pb-1">
+                    <span>{ing.name}</span>
+                    {ing.amount ? <span className="text-muted">{ing.amount}</span> : null}
+                  </li>
+                ))}
+              </ul>
               {r.instructions ? (
                 <p className="mt-3 text-sm leading-relaxed text-muted">{r.instructions}</p>
               ) : null}
@@ -306,70 +314,189 @@ function RecipeList({
   );
 }
 
-function CreateForm({ onSubmit }: { onSubmit: (e: FormEvent<HTMLFormElement>) => void }) {
+function RecipeForm({
+  onSubmit,
+  submitLabel = "Сохранить рецепт",
+}: {
+  onSubmit: (values: RecipeFormValues) => void;
+  submitLabel?: string;
+}) {
+  const [title, setTitle] = useState("");
+  const [timeLabel, setTimeLabel] = useState("");
+  const [portions, setPortions] = useState(2);
+  const [ingredients, setIngredients] = useState<IngredientItem[]>([{ name: "", amount: "" }]);
+  const [instructions, setInstructions] = useState("");
+  const [kcal, setKcal] = useState(0);
+  const [protein, setProtein] = useState(0);
+  const [fat, setFat] = useState(0);
+  const [carbs, setCarbs] = useState(0);
+
+  const cleaned = ingredients
+    .map((i) => ({ name: i.name.trim(), amount: i.amount.trim() }))
+    .filter((i) => i.name.length > 0);
+  const valid = title.trim().length >= 2 && cleaned.length > 0;
+
+  function handleSubmit(e: FormEvent<HTMLFormElement>) {
+    e.preventDefault();
+    if (!valid) return;
+    onSubmit({
+      title: title.trim(),
+      timeLabel: timeLabel.trim() || "30 мин",
+      portions,
+      ingredients: cleaned,
+      instructions: instructions.trim(),
+      kcal,
+      protein,
+      fat,
+      carbs,
+    });
+    setTitle("");
+    setTimeLabel("");
+    setPortions(2);
+    setIngredients([{ name: "", amount: "" }]);
+    setInstructions("");
+    setKcal(0);
+    setProtein(0);
+    setFat(0);
+    setCarbs(0);
+  }
+
   return (
     <section>
       <h1 className="font-display text-5xl font-light tracking-tight text-sage-deep md:text-7xl">
         СВОЙ РЕЦЕПТ
       </h1>
       <p className="mt-2 mb-8 text-sm text-muted">Сохранится в вашей базе и появится в ленте</p>
-      <form onSubmit={onSubmit} className="max-w-xl space-y-4">
+      <form onSubmit={handleSubmit} className="max-w-xl space-y-4">
         <label className="block text-sm">
           Название
           <input
-            name="title"
+            value={title}
+            onChange={(e) => setTitle(e.target.value)}
             required
+            minLength={2}
             className="mt-2 min-h-12 w-full rounded-md border border-line bg-paper px-4"
+            placeholder="Паста с томатами"
           />
         </label>
-        <label className="block text-sm">
-          Время
-          <input
-            name="timeLabel"
-            placeholder="30 мин"
-            className="mt-2 min-h-12 w-full rounded-md border border-line bg-paper px-4"
-          />
-        </label>
-        <label className="block text-sm">
-          Ингредиенты через запятую
-          <input
-            name="ingredients"
-            required
-            placeholder="помидор, лук, масло"
-            className="mt-2 min-h-12 w-full rounded-md border border-line bg-paper px-4"
-          />
-        </label>
+        <div className="grid grid-cols-2 gap-3">
+          <label className="block text-sm">
+            Время
+            <input
+              value={timeLabel}
+              onChange={(e) => setTimeLabel(e.target.value)}
+              placeholder="30 мин"
+              className="mt-2 min-h-12 w-full rounded-md border border-line bg-paper px-4"
+            />
+          </label>
+          <label className="block text-sm">
+            Порций
+            <input
+              type="number"
+              min={1}
+              max={20}
+              value={portions}
+              onChange={(e) => setPortions(Math.max(1, Math.min(20, Number(e.target.value) || 1)))}
+              className="mt-2 min-h-12 w-full rounded-md border border-line bg-paper px-4"
+            />
+          </label>
+        </div>
+
+        <div className="text-sm">
+          <p className="mb-2">Ингредиенты и количество</p>
+          <div className="space-y-2">
+            {ingredients.map((ing, i) => (
+              <div key={i} className="flex gap-2">
+                <input
+                  value={ing.name}
+                  onChange={(e) =>
+                    setIngredients((prev) =>
+                      prev.map((it, j) => (j === i ? { ...it, name: e.target.value } : it)),
+                    )
+                  }
+                  placeholder="Продукт"
+                  className="min-h-12 flex-1 rounded-md border border-line bg-paper px-4"
+                />
+                <input
+                  value={ing.amount}
+                  onChange={(e) =>
+                    setIngredients((prev) =>
+                      prev.map((it, j) => (j === i ? { ...it, amount: e.target.value } : it)),
+                    )
+                  }
+                  placeholder="200 г"
+                  className="min-h-12 w-28 rounded-md border border-line bg-paper px-3"
+                />
+                <button
+                  type="button"
+                  aria-label="Удалить ингредиент"
+                  onClick={() =>
+                    setIngredients((prev) =>
+                      prev.length > 1 ? prev.filter((_, j) => j !== i) : prev,
+                    )
+                  }
+                  className="min-h-12 w-12 rounded-md border border-line bg-paper text-muted"
+                >
+                  ✕
+                </button>
+              </div>
+            ))}
+          </div>
+          <button
+            type="button"
+            onClick={() => setIngredients((prev) => [...prev, { name: "", amount: "" }])}
+            className="mt-2 min-h-10 rounded-full bg-paper px-5 text-sm"
+          >
+            + Добавить ингредиент
+          </button>
+        </div>
+
         <label className="block text-sm">
           Как готовить
           <textarea
-            name="instructions"
+            value={instructions}
+            onChange={(e) => setInstructions(e.target.value)}
             rows={4}
             className="mt-2 w-full rounded-md border border-line bg-paper px-4 py-3"
           />
         </label>
+
         <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
-          <Num name="kcal" label="ккал" />
-          <Num name="protein" label="белки" />
-          <Num name="fat" label="жиры" />
-          <Num name="carbs" label="углеводы" />
+          <Num label="ккал" value={kcal} onChange={setKcal} />
+          <Num label="белки" value={protein} onChange={setProtein} />
+          <Num label="жиры" value={fat} onChange={setFat} />
+          <Num label="углеводы" value={carbs} onChange={setCarbs} />
         </div>
-        <button type="submit" className="min-h-12 rounded-full bg-ink px-8 text-cream">
-          Сохранить рецепт
+
+        <button
+          type="submit"
+          disabled={!valid}
+          className="min-h-12 rounded-full bg-ink px-8 text-cream disabled:opacity-40"
+        >
+          {submitLabel}
         </button>
       </form>
     </section>
   );
 }
 
-function Num({ name, label }: { name: string; label: string }) {
+function Num({
+  label,
+  value,
+  onChange,
+}: {
+  label: string;
+  value: number;
+  onChange: (v: number) => void;
+}) {
   return (
     <label className="block text-sm">
       {label}
       <input
-        name={name}
         type="number"
         min={0}
-        defaultValue={0}
+        value={value}
+        onChange={(e) => onChange(Math.max(0, Number(e.target.value) || 0))}
         className="mt-2 min-h-12 w-full rounded-md border border-line bg-paper px-3"
       />
     </label>
