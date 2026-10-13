@@ -31,6 +31,25 @@ const ingredientSchema = z.object({
   amount: z.string().trim().max(40),
 });
 
+/** Ограничение на data-URL фото: ~2,6 МБ файла в base64-представлении. */
+const IMAGE_MAX_CHARS = 3_500_000;
+
+/**
+ * Фото рецепта: пустая строка (возьмём картинку по умолчанию), путь к файлу
+ * из каталога /images/ либо data-URL (jpeg/png/webp), который клиент готовит
+ * из загруженного файла с уменьшением размера и сжатием.
+ */
+const imageSchema = z
+  .string()
+  .max(IMAGE_MAX_CHARS)
+  .refine(
+    (v) =>
+      v === "" ||
+      v.startsWith("/images/") ||
+      /^data:image\/(jpeg|png|webp);base64,/.test(v),
+    "Ожидается путь /images/... или data-URL изображения (JPEG/PNG/WebP)",
+  );
+
 /**
  * ingredients_json приходит из Postgres уже распарсенным (jsonb) либо строкой —
  * поддерживаем оба варианта и откатываемся к старой текстовой колонке.
@@ -162,6 +181,7 @@ export const createRecipe = createServerFn({ method: "POST" })
       timeLabel: z.string().trim().max(40),
       ingredients: z.array(ingredientSchema).min(1).max(30),
       portions: z.number().int().min(1).max(20),
+      image: imageSchema,
       instructions: z.string().trim().max(2000),
       kcal: z.number().int().min(0).max(5000),
       protein: z.number().int().min(0).max(500),
@@ -185,7 +205,7 @@ export const createRecipe = createServerFn({ method: "POST" })
         ${JSON.stringify(data.ingredients)},
         ${data.portions},
         ${data.instructions},
-        ${"/images/tomato-soup.jpg"},
+        ${data.image || "/images/tomato-soup.jpg"},
         ${data.kcal},
         ${data.protein},
         ${data.fat},
