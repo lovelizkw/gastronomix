@@ -1,5 +1,5 @@
 import { createFileRoute, Link } from "@tanstack/react-router";
-import { FormEvent, useEffect, useMemo, useState } from "react";
+import { ChangeEvent, FormEvent, useEffect, useMemo, useState } from "react";
 import { RedirectToSignIn } from "@/lib/auth/gates";
 import { useCurrentUserState } from "@/lib/auth/use-current-user";
 import { KitchenUser } from "@/components/site-nav";
@@ -25,11 +25,35 @@ export type RecipeFormValues = {
   portions: number;
   ingredients: IngredientItem[];
   instructions: string;
+  image: string;
   kcal: number;
   protein: number;
   fat: number;
   carbs: number;
 };
+
+/**
+ * Превращает выбранный файл в компактный data-URL: уменьшает длинную сторону
+ * до maxSize и перекодирует в JPEG, чтобы фото recipes.image не раздувало базу.
+ */
+async function fileToCompressedDataUrl(
+  file: File,
+  maxSize = 1000,
+  quality = 0.75,
+): Promise<string> {
+  const bitmap = await createImageBitmap(file);
+  const scale = Math.min(1, maxSize / Math.max(bitmap.width, bitmap.height));
+  const w = Math.max(1, Math.round(bitmap.width * scale));
+  const h = Math.max(1, Math.round(bitmap.height * scale));
+  const canvas = document.createElement("canvas");
+  canvas.width = w;
+  canvas.height = h;
+  const ctx = canvas.getContext("2d");
+  if (!ctx) throw new Error("Canvas недоступен в этом браузере");
+  ctx.drawImage(bitmap, 0, 0, w, h);
+  bitmap.close?.();
+  return canvas.toDataURL("image/jpeg", quality);
+}
 
 function KitchenPage() {
   const { user, isPending } = useCurrentUserState();
@@ -326,6 +350,9 @@ function RecipeForm({
   const [portions, setPortions] = useState(2);
   const [ingredients, setIngredients] = useState<IngredientItem[]>([{ name: "", amount: "" }]);
   const [instructions, setInstructions] = useState("");
+  const [photo, setPhoto] = useState("");
+  const [photoError, setPhotoError] = useState("");
+  const [photoBusy, setPhotoBusy] = useState(false);
   const [kcal, setKcal] = useState(0);
   const [protein, setProtein] = useState(0);
   const [fat, setFat] = useState(0);
@@ -334,7 +361,26 @@ function RecipeForm({
   const cleaned = ingredients
     .map((i) => ({ name: i.name.trim(), amount: i.amount.trim() }))
     .filter((i) => i.name.length > 0);
-  const valid = title.trim().length >= 2 && cleaned.length > 0;
+  const valid = title.trim().length >= 2 && cleaned.length > 0 && !photoBusy;
+
+  async function onPhotoChange(e: ChangeEvent<HTMLInputElement>) {
+    const file = e.target.files?.[0];
+    e.target.value = "";
+    if (!file) return;
+    if (!file.type.startsWith("image/")) {
+      setPhotoError("Можно выбрать только изображение");
+      return;
+    }
+    setPhotoError("");
+    setPhotoBusy(true);
+    try {
+      setPhoto(await fileToCompressedDataUrl(file));
+    } catch {
+      setPhotoError("Не удалось обработать изображение");
+    } finally {
+      setPhotoBusy(false);
+    }
+  }
 
   function handleSubmit(e: FormEvent<HTMLFormElement>) {
     e.preventDefault();
@@ -345,6 +391,7 @@ function RecipeForm({
       portions,
       ingredients: cleaned,
       instructions: instructions.trim(),
+      image: photo,
       kcal,
       protein,
       fat,
@@ -355,6 +402,8 @@ function RecipeForm({
     setPortions(2);
     setIngredients([{ name: "", amount: "" }]);
     setInstructions("");
+    setPhoto("");
+    setPhotoError("");
     setKcal(0);
     setProtein(0);
     setFat(0);
@@ -400,6 +449,47 @@ function RecipeForm({
               className="mt-2 min-h-12 w-full rounded-md border border-line bg-paper px-4"
             />
           </label>
+        </div>
+
+        <div className="text-sm">
+          <p className="mb-2">Фото блюда</p>
+          <div className="flex items-center gap-4">
+            {photo ? (
+              <img
+                src={photo}
+                alt="Превью фото"
+                className="h-24 w-24 rounded-md border border-line object-cover"
+              />
+            ) : (
+              <div className="flex h-24 w-24 items-center justify-center rounded-md border border-dashed border-line text-xs text-muted">
+                нет фото
+              </div>
+            )}
+            <div>
+              <label className="inline-block min-h-10 cursor-pointer rounded-full bg-paper px-5 py-2 text-sm">
+                {photoBusy ? "Обработка…" : photo ? "Заменить фото" : "Выбрать фото"}
+                <input
+                  type="file"
+                  accept="image/jpeg,image/png,image/webp"
+                  className="hidden"
+                  onChange={onPhotoChange}
+                />
+              </label>
+              {photo ? (
+                <button
+                  type="button"
+                  onClick={() => setPhoto("")}
+                  className="ml-3 text-sm text-muted underline"
+                >
+                  Убрать
+                </button>
+              ) : null}
+              {photoError ? <p className="mt-2 text-xs text-red-700">{photoError}</p> : null}
+              <p className="mt-2 text-xs text-muted">
+                JPEG/PNG/WebP, автоматически сожмётся до 1000 px
+              </p>
+            </div>
+          </div>
         </div>
 
         <div className="text-sm">
