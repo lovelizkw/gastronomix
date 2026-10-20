@@ -217,6 +217,48 @@ export const createRecipe = createServerFn({ method: "POST" })
     return mapRecipe(rows[0], context.userId);
   });
 
+export const updateRecipe = createServerFn({ method: "POST" })
+  .middleware([authMiddleware])
+  .validator(
+    z.object({
+      id: z.number().int(),
+      title: z.string().trim().min(2).max(80),
+      timeLabel: z.string().trim().max(40),
+      ingredients: z.array(ingredientSchema).min(1).max(30),
+      portions: z.number().int().min(1).max(20),
+      image: imageSchema,
+      instructions: z.string().trim().max(2000),
+      kcal: z.number().int().min(0).max(5000),
+      protein: z.number().int().min(0).max(500),
+      fat: z.number().int().min(0).max(500),
+      carbs: z.number().int().min(0).max(500),
+    }),
+  )
+  .handler(async ({ context, data }) => {
+    const sql = await getSql();
+    const ingredientsText = ingredientsToText(data.ingredients);
+    // user_id в условии — гарантия, что чужой рецепт изменить нельзя.
+    const rows = await sql<RecipeDb>`
+      update recipes set
+        title = ${data.title},
+        time_label = ${data.timeLabel || "30 мин"},
+        ingredients = ${ingredientsText},
+        ingredients_json = ${JSON.stringify(data.ingredients)},
+        portions = ${data.portions},
+        instructions = ${data.instructions},
+        image = ${data.image || "/images/tomato-soup.jpg"},
+        kcal = ${data.kcal},
+        protein = ${data.protein},
+        fat = ${data.fat},
+        carbs = ${data.carbs}
+      where id = ${data.id} and user_id = ${context.userId}
+      returning id, user_id, title, time_label, ingredients, ingredients_json, portions,
+                instructions, image, kcal, protein, fat, carbs
+    `;
+    if (rows.length === 0) throw new Error("Рецепт не найден или принадлежит другому пользователю");
+    return mapRecipe(rows[0], context.userId);
+  });
+
 export const deleteRecipe = createServerFn({ method: "POST" })
   .middleware([authMiddleware])
   .validator(z.object({ id: z.number().int() }))

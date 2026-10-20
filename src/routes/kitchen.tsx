@@ -10,6 +10,7 @@ import {
   listProducts,
   listRecipes,
   removeProduct,
+  updateRecipe,
   type IngredientItem,
   type ProductRow,
   type RecipeRow,
@@ -55,6 +56,22 @@ async function fileToCompressedDataUrl(
   return canvas.toDataURL("image/jpeg", quality);
 }
 
+/** Значения формы из строки рецепта (для режима редактирования). */
+function recipeToFormValues(r: RecipeRow): RecipeFormValues {
+  return {
+    title: r.title,
+    timeLabel: r.timeLabel,
+    portions: r.portions,
+    ingredients: r.ingredients.map((i) => ({ ...i })),
+    instructions: r.instructions,
+    image: r.image.startsWith("data:") ? r.image : "",
+    kcal: r.kbju.k,
+    protein: r.kbju.b,
+    fat: r.kbju.j,
+    carbs: r.kbju.u,
+  };
+}
+
 function KitchenPage() {
   const { user, isPending } = useCurrentUserState();
   const [tab, setTab] = useState<"fridge" | "recipes" | "create">("fridge");
@@ -62,6 +79,7 @@ function KitchenPage() {
   const [recipes, setRecipes] = useState<RecipeRow[]>([]);
   const [loading, setLoading] = useState(true);
   const [open, setOpen] = useState(false);
+  const [editing, setEditing] = useState<RecipeRow | null>(null);
 
   useEffect(() => {
     if (!user) return;
@@ -103,7 +121,16 @@ function KitchenPage() {
     e.currentTarget.reset();
   }
 
-  async function onCreateRecipe(values: RecipeFormValues) {
+  async function onSubmitRecipe(values: RecipeFormValues) {
+    if (editing) {
+      const row = await updateRecipe({ data: { id: editing.id, ...values } });
+      if (row) {
+        setRecipes((prev) => prev.map((r) => (r.id === row.id ? row : r)));
+      }
+      setEditing(null);
+      setTab("recipes");
+      return;
+    }
     const row = await createRecipe({ data: values });
     if (row) {
       setRecipes((prev) => [row, ...prev]);
@@ -132,7 +159,10 @@ function KitchenPage() {
             <button
               key={id}
               type="button"
-              onClick={() => setTab(id)}
+              onClick={() => {
+                if (id !== "create") setEditing(null);
+                setTab(id);
+              }}
               className={`min-h-11 rounded-full px-5 ${tab === id ? "bg-ink text-cream" : "bg-paper text-ink"}`}
             >
               {label}
@@ -154,13 +184,29 @@ function KitchenPage() {
         ) : tab === "recipes" ? (
           <RecipeList
             recipes={visibleRecipes}
+            onEdit={(recipe) => {
+              setEditing(recipe);
+              setTab("create");
+            }}
             onDelete={async (id) => {
               await deleteRecipe({ data: { id } });
               setRecipes((prev) => prev.filter((r) => r.id !== id));
             }}
           />
         ) : (
-          <RecipeForm onSubmit={onCreateRecipe} />
+          <RecipeForm
+            key={editing ? `edit-${editing.id}` : "new"}
+            initial={editing ? recipeToFormValues(editing) : null}
+            onSubmit={onSubmitRecipe}
+            onCancel={
+              editing
+                ? () => {
+                    setEditing(null);
+                    setTab("recipes");
+                  }
+                : undefined
+            }
+          />
         )}
       </div>
 
@@ -276,9 +322,11 @@ function Fridge({
 
 function RecipeList({
   recipes,
+  onEdit,
   onDelete,
 }: {
   recipes: RecipeRow[];
+  onEdit: (recipe: RecipeRow) => void;
   onDelete: (id: number) => void;
 }) {
   return (
@@ -297,13 +345,22 @@ function RecipeList({
               <div className="flex items-start justify-between gap-3">
                 <h2 className="font-serif text-2xl">{r.title}</h2>
                 {r.mine ? (
-                  <button
-                    type="button"
-                    onClick={() => onDelete(r.id)}
-                    className="text-xs text-muted underline"
-                  >
-                    Удалить
-                  </button>
+                  <span className="flex shrink-0 gap-2 text-xs">
+                    <button
+                      type="button"
+                      onClick={() => onEdit(r)}
+                      className="text-muted underline"
+                    >
+                      Изменить
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => onDelete(r.id)}
+                      className="text-muted underline"
+                    >
+                      Удалить
+                    </button>
+                  </span>
                 ) : (
                   <span className="rounded-full bg-sage px-2 py-1 text-[10px] tracking-wide uppercase">
                     Каталог
@@ -339,24 +396,29 @@ function RecipeList({
 }
 
 function RecipeForm({
+  initial,
   onSubmit,
-  submitLabel = "Сохранить рецепт",
+  onCancel,
 }: {
+  initial?: RecipeFormValues | null;
   onSubmit: (values: RecipeFormValues) => void;
-  submitLabel?: string;
+  onCancel?: () => void;
 }) {
-  const [title, setTitle] = useState("");
-  const [timeLabel, setTimeLabel] = useState("");
-  const [portions, setPortions] = useState(2);
-  const [ingredients, setIngredients] = useState<IngredientItem[]>([{ name: "", amount: "" }]);
-  const [instructions, setInstructions] = useState("");
-  const [photo, setPhoto] = useState("");
+  const isEdit = Boolean(initial);
+  const [title, setTitle] = useState(initial?.title ?? "");
+  const [timeLabel, setTimeLabel] = useState(initial?.timeLabel ?? "");
+  const [portions, setPortions] = useState(initial?.portions ?? 2);
+  const [ingredients, setIngredients] = useState<IngredientItem[]>(
+    initial?.ingredients.length ? initial.ingredients.map((i) => ({ ...i })) : [{ name: "", amount: "" }],
+  );
+  const [instructions, setInstructions] = useState(initial?.instructions ?? "");
+  const [photo, setPhoto] = useState(initial?.image ?? "");
   const [photoError, setPhotoError] = useState("");
   const [photoBusy, setPhotoBusy] = useState(false);
-  const [kcal, setKcal] = useState(0);
-  const [protein, setProtein] = useState(0);
-  const [fat, setFat] = useState(0);
-  const [carbs, setCarbs] = useState(0);
+  const [kcal, setKcal] = useState(initial?.kcal ?? 0);
+  const [protein, setProtein] = useState(initial?.protein ?? 0);
+  const [fat, setFat] = useState(initial?.fat ?? 0);
+  const [carbs, setCarbs] = useState(initial?.carbs ?? 0);
 
   const cleaned = ingredients
     .map((i) => ({ name: i.name.trim(), amount: i.amount.trim() }))
@@ -413,9 +475,13 @@ function RecipeForm({
   return (
     <section>
       <h1 className="font-display text-5xl font-light tracking-tight text-sage-deep md:text-7xl">
-        СВОЙ РЕЦЕПТ
+        {isEdit ? "ПРАВКА РЕЦЕПТА" : "СВОЙ РЕЦЕПТ"}
       </h1>
-      <p className="mt-2 mb-8 text-sm text-muted">Сохранится в вашей базе и появится в ленте</p>
+      <p className="mt-2 mb-8 text-sm text-muted">
+        {isEdit
+          ? "Измените поля и сохраните — карточка обновится в ленте"
+          : "Сохранится в вашей базе и появится в ленте"}
+      </p>
       <form onSubmit={handleSubmit} className="max-w-xl space-y-4">
         <label className="block text-sm">
           Название
@@ -558,13 +624,24 @@ function RecipeForm({
           <Num label="углеводы" value={carbs} onChange={setCarbs} />
         </div>
 
-        <button
-          type="submit"
-          disabled={!valid}
-          className="min-h-12 rounded-full bg-ink px-8 text-cream disabled:opacity-40"
-        >
-          {submitLabel}
-        </button>
+        <div className="flex flex-wrap gap-3">
+          <button
+            type="submit"
+            disabled={!valid}
+            className="min-h-12 rounded-full bg-ink px-8 text-cream disabled:opacity-40"
+          >
+            {isEdit ? "Сохранить изменения" : "Сохранить рецепт"}
+          </button>
+          {onCancel ? (
+            <button
+              type="button"
+              onClick={onCancel}
+              className="min-h-12 rounded-full bg-paper px-8"
+            >
+              Отмена
+            </button>
+          ) : null}
+        </div>
       </form>
     </section>
   );
