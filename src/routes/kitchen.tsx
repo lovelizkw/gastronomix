@@ -189,6 +189,8 @@ function KitchenPage() {
               setTab("create");
             }}
             onDelete={async (id) => {
+              const recipe = recipes.find((r) => r.id === id);
+              if (!window.confirm(`Удалить рецепт «${recipe?.title ?? ""}»?`)) return;
               await deleteRecipe({ data: { id } });
               setRecipes((prev) => prev.filter((r) => r.id !== id));
             }}
