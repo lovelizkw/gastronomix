@@ -111,7 +111,16 @@ function main(argv) {
     process.exit(2);
   }
   const env = mergeAppEnv(readAppEnv(projectRoot()), process.env);
-  const child = spawn(command, args, { stdio: "inherit", env });
+  // On Windows, npm's PATH shim for `vite` is a .cmd file — spawning it
+  // without a shell fails with ENOENT. Pass a single pre-joined command line
+  // (quoting args with spaces) to avoid DEP0190 for shell + args.
+  const child =
+    process.platform === "win32"
+      ? spawn(
+          [command, ...args].map((a) => (/\s/.test(a) ? `"${a}"` : a)).join(" "),
+          { stdio: "inherit", env, shell: true },
+        )
+      : spawn(command, args, { stdio: "inherit", env });
   // The dev server is long-running and is stopped by signalling this wrapper.
   for (const signal of ["SIGINT", "SIGTERM", "SIGHUP"]) {
     process.on(signal, () => child.kill(signal));
