@@ -17,3 +17,6 @@ artifacts/
 screenshots/
 *.log
 .node_modules.lock
+
+# local database (PGLite data directory)
+.data/

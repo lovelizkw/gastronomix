@@ -107,11 +107,18 @@ function createNeonSql(): Promise<Sql> {
 
 async function createPgliteSql(): Promise<Sql> {
   // Embedded Postgres, imported on demand so it never loads on the Neon path.
-  // One in-memory instance per process, shared across HMR module instances, so
-  // data survives source edits (it resets on dev-server restart).
+  // One on-disk instance per process, shared across HMR module instances, so
+  // users, products and recipes survive dev-server restarts. The data directory
+  // lives outside the repo (`.data/` is gitignored).
   globalRef.__pgliteInstance__ ??= (async () => {
     const { PGlite } = await import("@electric-sql/pglite");
-    const pg = new PGlite({
+    const { resolve } = await import("node:path");
+    const { mkdir } = await import("node:fs/promises");
+    const dataDir = resolve(process.cwd(), ".data", "pglite");
+    // PGlite создаёт только последний сегмент пути, поэтому родительскую
+    // папку `.data` готовим заранее — иначе первый запуск падает с ENOENT.
+    await mkdir(dataDir, { recursive: true });
+    const pg = new PGlite(dataDir, {
       parsers: {
         [OID_INT8]: Number,
         [OID_DATE]: identity,
@@ -119,6 +126,17 @@ async function createPgliteSql(): Promise<Sql> {
       },
     });
     await pg.waitReady;
+    // Аккуратно закрываем кластер при остановке dev-сервера (Ctrl+C), чтобы
+    // PGlite успел сбросить WAL на диск. Иначе последние записи могут
+    // потеряться при следующем запуске.
+    const shutdown = () => {
+      void pg
+        .close()
+        .catch(() => {})
+        .finally(() => process.exit(0));
+    };
+    process.once("SIGINT", shutdown);
+    process.once("SIGTERM", shutdown);
     await pg.exec(
       "create table if not exists _migrations (name text primary key, applied_at timestamptz not null default now())",
     );
