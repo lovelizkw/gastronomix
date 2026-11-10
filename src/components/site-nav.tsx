@@ -26,6 +26,12 @@ export function SiteNav({ tone = "light" }: { tone?: "light" | "dark" }) {
               >
                 Кухня
               </Link>
+              <Link
+                to="/profile"
+                className={`hidden min-h-11 items-center sm:flex ${ink ? "text-cream" : "text-ink"}`}
+              >
+                Профиль
+              </Link>
             </SignedIn>
             <SignedOut>
               <Link

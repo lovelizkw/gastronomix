@@ -43,7 +43,8 @@ function RegisterPage() {
             РЕГИСТРАЦИЯ
           </h1>
           <p className="mt-6 max-w-sm text-sm leading-relaxed text-ink/80">
-            Аккаунт сохраняется в базе: холодильник и свои рецепты не пропадут.
+            Создайте аккаунт, чтобы вести холодильник, собирать любимые рецепты
+            и готовить из того, что уже есть дома.
           </p>
         </div>
         <form onSubmit={onSubmit} className="rounded-lg bg-cream p-6 shadow-sm md:p-8">
