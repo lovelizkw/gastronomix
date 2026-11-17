@@ -26,7 +26,7 @@ function Chip({ label, active, onClick }: ChipProps) {
       type="button"
       onClick={onClick}
       aria-pressed={active}
-      className={`min-h-10 rounded-full px-4 text-sm font-medium transition-colors ${
+      className={`min-h-10 rounded-full px-4 text-sm font-medium transition-colors active:scale-95 active:bg-sage ${
         active
           ? "bg-sage-deep text-cream"
           : "border border-line bg-paper text-ink hover:border-ink/30"
@@ -61,22 +61,31 @@ function RadioRow({
   current,
   onChange,
   label,
+  revision,
 }: {
   name: string;
   value: string;
   current: string;
   onChange: (value: string) => void;
   label: string;
+  revision: number;
 }) {
   return (
-    <label className="flex min-h-11 cursor-pointer items-center gap-2 text-sm">
+    // Неконтролируемый input: точка выбора двигается самим браузером, поэтому
+    // визуальный отклик гарантирован даже до подключения обработчиков React.
+    // `revision` перемонтирует группу один раз — когда подтянулись сохранённые
+    // настройки, и значение по умолчанию подставляется корректно.
+    <label
+      key={`${name}-${value}-${revision}`}
+      className="flex min-h-11 cursor-pointer items-center gap-2 text-sm"
+    >
       <input
         type="radio"
         name={name}
         value={value}
-        checked={current === value}
+        defaultChecked={current === value}
         onChange={() => onChange(value)}
-        className="size-4"
+        className="size-4 accent-sage-deep"
       />
       {label}
     </label>
@@ -106,6 +115,8 @@ function PreferencesPage() {
   // Пока React не «оживил» страницу, кнопки не работают — честно показываем
   // это оверлеем вместо тихо теряющихся кликов (в dev-режиме прогрев долгий).
   const [ready, setReady] = useState(false);
+  // Ревизия для перемонтирования нативных радиокнопок после загрузки настроек.
+  const [prefsRevision, setPrefsRevision] = useState(0);
 
   useEffect(() => {
     setReady(true);
@@ -129,14 +140,17 @@ function PreferencesPage() {
         setCuisines(prefs.cuisines);
         setSpice(prefs.spice);
         setPortionsMode(prefs.portionsMode);
+        setPrefsRevision((r) => r + 1);
       })
       .finally(() => {
         if (!cancelled) setLoading(false);
       });
+    // Зависимость — строковый id: объект user пересоздаётся на каждом рендере,
+    // и эффект перезагружал настройки, затирая только что сделанный выбор.
     return () => {
       cancelled = true;
     };
-  }, [user]);
+  }, [user?.id]);
 
   if (isPending) return <main className="min-h-svh bg-cream" />;
   if (!user) return <RedirectToSignIn />;
@@ -286,18 +300,18 @@ function PreferencesPage() {
               subtitle="Мягкая настройка: блюда под цель поднимаются выше в выдаче"
             >
               <div className="grid gap-1 sm:grid-cols-2">
-                <RadioRow name="goal" value="none" current={goal} onChange={(v) => setGoal(v as Preferences["goal"])} label="Без цели" />
-                <RadioRow name="goal" value="lose" current={goal} onChange={(v) => setGoal(v as Preferences["goal"])} label="Дефицит калорий (похудение)" />
-                <RadioRow name="goal" value="gain" current={goal} onChange={(v) => setGoal(v as Preferences["goal"])} label="Профицит (набор массы)" />
-                <RadioRow name="goal" value="gi" current={goal} onChange={(v) => setGoal(v as Preferences["goal"])} label="Контроль гликемического индекса" />
+                <RadioRow name="goal" value="none" current={goal} revision={prefsRevision} onChange={(v) => setGoal(v as Preferences["goal"])} label="Без цели" />
+                <RadioRow name="goal" value="lose" current={goal} revision={prefsRevision} onChange={(v) => setGoal(v as Preferences["goal"])} label="Дефицит калорий (похудение)" />
+                <RadioRow name="goal" value="gain" current={goal} revision={prefsRevision} onChange={(v) => setGoal(v as Preferences["goal"])} label="Профицит (набор массы)" />
+                <RadioRow name="goal" value="gi" current={goal} revision={prefsRevision} onChange={(v) => setGoal(v as Preferences["goal"])} label="Контроль гликемического индекса" />
               </div>
 
               <p className="mt-6 text-sm font-medium">Баланс БЖУ</p>
               <div className="mt-2 grid gap-1 sm:grid-cols-2">
-                <RadioRow name="macro" value="balance" current={macro} onChange={(v) => setMacro(v as Preferences["macro"])} label="Сбалансированный" />
-                <RadioRow name="macro" value="protein" current={macro} onChange={(v) => setMacro(v as Preferences["macro"])} label="Больше белка" />
-                <RadioRow name="macro" value="lowfat" current={macro} onChange={(v) => setMacro(v as Preferences["macro"])} label="Меньше жиров" />
-                <RadioRow name="macro" value="lowcarb" current={macro} onChange={(v) => setMacro(v as Preferences["macro"])} label="Меньше углеводов" />
+                <RadioRow name="macro" value="balance" current={macro} revision={prefsRevision} onChange={(v) => setMacro(v as Preferences["macro"])} label="Сбалансированный" />
+                <RadioRow name="macro" value="protein" current={macro} revision={prefsRevision} onChange={(v) => setMacro(v as Preferences["macro"])} label="Больше белка" />
+                <RadioRow name="macro" value="lowfat" current={macro} revision={prefsRevision} onChange={(v) => setMacro(v as Preferences["macro"])} label="Меньше жиров" />
+                <RadioRow name="macro" value="lowcarb" current={macro} revision={prefsRevision} onChange={(v) => setMacro(v as Preferences["macro"])} label="Меньше углеводов" />
               </div>
 
               <div className="mt-6 grid gap-4 sm:grid-cols-2">
@@ -335,8 +349,8 @@ function PreferencesPage() {
               subtitle="Влияют на порядок и подсказки в подборе"
             >
               <div className="grid gap-1 sm:grid-cols-2">
-                <RadioRow name="skill" value="novice" current={skill} onChange={(v) => setSkill(v as Preferences["skill"])} label="Новичок — простые блюда в приоритете" />
-                <RadioRow name="skill" value="chef" current={skill} onChange={(v) => setSkill(v as Preferences["skill"])} label="Шеф — не ограничивайте сложность" />
+                <RadioRow name="skill" value="novice" current={skill} revision={prefsRevision} onChange={(v) => setSkill(v as Preferences["skill"])} label="Новичок — простые блюда в приоритете" />
+                <RadioRow name="skill" value="chef" current={skill} revision={prefsRevision} onChange={(v) => setSkill(v as Preferences["skill"])} label="Шеф — не ограничивайте сложность" />
               </div>
 
               <p className="mt-6 text-sm font-medium">Доступная техника</p>
@@ -372,16 +386,16 @@ function PreferencesPage() {
                 <div>
                   <p className="text-sm font-medium">Острота</p>
                   <div className="mt-2">
-                    <RadioRow name="spice" value="any" current={spice} onChange={(v) => setSpice(v as Preferences["spice"])} label="Как получится" />
-                    <RadioRow name="spice" value="mild" current={spice} onChange={(v) => setSpice(v as Preferences["spice"])} label="Не остро" />
-                    <RadioRow name="spice" value="hot" current={spice} onChange={(v) => setSpice(v as Preferences["spice"])} label="Люблю поострее" />
+                    <RadioRow name="spice" value="any" current={spice} revision={prefsRevision} onChange={(v) => setSpice(v as Preferences["spice"])} label="Как получится" />
+                    <RadioRow name="spice" value="mild" current={spice} revision={prefsRevision} onChange={(v) => setSpice(v as Preferences["spice"])} label="Не остро" />
+                    <RadioRow name="spice" value="hot" current={spice} revision={prefsRevision} onChange={(v) => setSpice(v as Preferences["spice"])} label="Люблю поострее" />
                   </div>
                 </div>
                 <div>
                   <p className="text-sm font-medium">Порции</p>
                   <div className="mt-2">
-                    <RadioRow name="portions" value="single" current={portionsMode} onChange={(v) => setPortionsMode(v as Preferences["portionsMode"])} label="Готовлю на одного" />
-                    <RadioRow name="portions" value="family" current={portionsMode} onChange={(v) => setPortionsMode(v as Preferences["portionsMode"])} label="Готовлю на семью" />
+                    <RadioRow name="portions" value="single" current={portionsMode} revision={prefsRevision} onChange={(v) => setPortionsMode(v as Preferences["portionsMode"])} label="Готовлю на одного" />
+                    <RadioRow name="portions" value="family" current={portionsMode} revision={prefsRevision} onChange={(v) => setPortionsMode(v as Preferences["portionsMode"])} label="Готовлю на семью" />
                   </div>
                 </div>
               </div>
