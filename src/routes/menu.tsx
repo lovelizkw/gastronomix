@@ -175,6 +175,14 @@ function MenuPage() {
             >
               Следующая →
             </button>
+            <button
+              type="button"
+              onClick={() => window.print()}
+              className="min-h-11 rounded-full bg-ink px-4 text-sm font-medium text-cream"
+              title="Распечатать план или сохранить в PDF"
+            >
+              Печать / PDF
+            </button>
           </div>
         </div>
 

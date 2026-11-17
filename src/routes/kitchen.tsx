@@ -9,6 +9,7 @@ import {
   createRecipe,
   deleteRecipe,
   getMenu,
+  importRecipeFromUrl,
   listProducts,
   listRecipes,
   removeProduct,
@@ -316,6 +317,12 @@ function KitchenPage() {
             Покупки
           </Link>
           <Link
+            to="/builder"
+            className="min-h-11 rounded-full border border-cream/40 px-4 py-2 text-cream"
+          >
+            Конструктор
+          </Link>
+          <Link
             to="/profile"
             className="min-h-11 rounded-full border border-cream/40 px-4 py-2 text-cream"
           >
@@ -358,6 +365,10 @@ function KitchenPage() {
             onOpen={() => setOpen(true)}
             onOpenPaste={() => setPasteOpen(true)}
             onAddPreset={onAddPreset}
+            onRescue={(productName) => {
+              setFilters({ q: productName });
+              setTab("recipes");
+            }}
             onRemove={async (id) => {
               await removeProduct({ data: { id } });
               setProducts((prev) => prev.filter((p) => p.id !== id));
@@ -512,6 +523,35 @@ function daysLeft(expiresAt: string | null): number | null {
   return Math.round((expiry.getTime() - today.getTime()) / 86_400_000);
 }
 
+/**
+ * Шкала жизни продукта: какая часть срока годности осталась.
+ * Прогресс считается от даты добавления (created_at) до expires_at.
+ * Возвращает долю 0..1 (1 — только что куплен, 0 — срок вышел).
+ */
+function shelfLifeLeft(product: ProductRow): number | null {
+  if (!product.expiresAt) return null;
+  const days = daysLeft(product.expiresAt);
+  if (days === null) return null;
+  if (!product.createdAt) return days <= 0 ? 0 : 1;
+  const [cy, cm, cd] = product.createdAt.split("-").map(Number);
+  const [ey, em, ed] = product.expiresAt.split("-").map(Number);
+  const created = new Date(cy, cm - 1, cd).getTime();
+  const expiry = new Date(ey, em - 1, ed).getTime();
+  const now = Date.now();
+  const total = expiry - created;
+  if (!Number.isFinite(total) || total <= 0) return days <= 0 ? 0 : 1;
+  return Math.min(1, Math.max(0, (expiry - now) / total));
+}
+
+/** Цвет светофора: доля оставшегося срока → зелёный / жёлтый / красный. */
+function freshnessColor(product: ProductRow): { bar: string; label: string } | null {
+  const left = shelfLifeLeft(product);
+  if (left === null) return null;
+  if (left <= 0.2) return { bar: "bg-blush-deep", label: "Используйте срочно" };
+  if (left <= 0.5) return { bar: "bg-blush", label: "Скоро испортится" };
+  return { bar: "bg-sage-deep", label: "Свежий" };
+}
+
 function freshnessBadge(days: number | null): { label: string; className: string } | null {
   if (days === null) return null;
   if (days < 0) return { label: "Просрочен", className: "bg-blush text-ink" };
@@ -527,6 +567,7 @@ function Fridge({
   onOpen,
   onOpenPaste,
   onAddPreset,
+  onRescue,
   onRemove,
 }: {
   products: ProductRow[];
@@ -535,8 +576,14 @@ function Fridge({
   onOpen: () => void;
   onOpenPaste: () => void;
   onAddPreset: () => void;
+  onRescue: (productName: string) => void;
   onRemove: (id: number) => void;
 }) {
+  const rescue = products
+    .map((p) => ({ product: p, days: daysLeft(p.expiresAt) }))
+    .filter((x) => x.days !== null && x.days <= 1)
+    .sort((a, b) => (a.days ?? 0) - (b.days ?? 0))
+    .slice(0, 3);
   const soon = products
     .map((p) => ({ product: p, days: daysLeft(p.expiresAt) }))
     .filter((x) => x.days !== null && x.days <= 6)
@@ -577,20 +624,31 @@ function Fridge({
         </div>
       </div>
 
-      {/* Дашборд: свежесть, блюдо дня, КБЖУ за день */}
+      {/* Дашборд: спаси меня сегодня, блюдо дня, КБЖУ за день */}
       <div className="mb-8 grid gap-4 md:grid-cols-3">
-        <div className="rounded-lg bg-paper p-5">
-          <p className="text-xs tracking-wide uppercase text-muted">Скоро испортится</p>
-          {soon.length === 0 ? (
-            <p className="mt-3 text-sm text-muted">Всё свежее — есть время</p>
+        <div className="rounded-lg bg-blush/40 p-5">
+          <p className="text-xs font-medium tracking-wide uppercase text-ink">Спаси меня сегодня</p>
+          {rescue.length === 0 ? (
+            <p className="mt-3 text-sm text-muted">
+              За ближайшие сутки ничего не испортится — всё под контролем
+            </p>
           ) : (
-            <ul className="mt-3 space-y-2">
-              {soon.slice(0, 3).map(({ product, days }) => (
+            <ul className="mt-3 space-y-3">
+              {rescue.map(({ product, days }) => (
                 <li key={product.id} className="text-sm">
-                  <span className="font-medium">{product.name}</span>
-                  <span className="ml-2 text-muted">
-                    {days! < 0 ? "просрочен" : `${days} дн.`}
-                  </span>
+                  <div className="flex items-baseline justify-between gap-2">
+                    <span className="font-medium">{product.name}</span>
+                    <span className="text-muted">
+                      {days! < 0 ? "просрочен" : days === 0 ? "истекает сегодня" : "истекает завтра"}
+                    </span>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => onRescue(product.name)}
+                    className="mt-1 min-h-9 rounded-full bg-ink px-4 text-xs font-medium text-cream"
+                  >
+                    Приготовить из этого
+                  </button>
                 </li>
               ))}
             </ul>
@@ -633,12 +691,14 @@ function Fridge({
         <ul className="grid gap-3">
           {products.map((p) => {
             const badge = freshnessBadge(daysLeft(p.expiresAt));
+            const color = freshnessColor(p);
+            const left = shelfLifeLeft(p);
             return (
               <li
                 key={p.id}
                 className="flex items-center justify-between gap-4 border-b border-line py-4"
               >
-                <div>
+                <div className="min-w-0 flex-1">
                   <p className="flex flex-wrap items-center gap-2 font-serif text-2xl">
                     {p.name}
                     {badge ? (
@@ -653,6 +713,18 @@ function Fridge({
                     {p.category}
                     {p.qty ? ` · ${p.qty}` : ""}
                   </p>
+                  {/* Светофор свежести: зелёный → жёлтый → красный */}
+                  {color && left !== null ? (
+                    <div className="mt-2 max-w-56">
+                      <div className="h-1.5 w-full overflow-hidden rounded-full bg-line">
+                        <div
+                          className={`h-full rounded-full transition-all ${color.bar}`}
+                          style={{ width: `${Math.max(3, Math.round(left * 100))}%` }}
+                        />
+                      </div>
+                      <p className="mt-1 text-[11px] text-muted">{color.label}</p>
+                    </div>
+                  ) : null}
                 </div>
                 <button
                   type="button"
@@ -897,6 +969,9 @@ function RecipeForm({
   onCancel?: () => void;
 }) {
   const isEdit = Boolean(initial);
+  const [importUrl, setImportUrl] = useState("");
+  const [importBusy, setImportBusy] = useState(false);
+  const [importError, setImportError] = useState("");
   const [title, setTitle] = useState(initial?.title ?? "");
   const [timeLabel, setTimeLabel] = useState(initial?.timeLabel ?? "");
   const [portions, setPortions] = useState(initial?.portions ?? 2);
@@ -916,6 +991,32 @@ function RecipeForm({
     .map((i) => ({ name: i.name.trim(), amount: i.amount.trim() }))
     .filter((i) => i.name.length > 0);
   const valid = title.trim().length >= 2 && cleaned.length > 0 && !photoBusy;
+
+  async function onImportUrl(e: FormEvent<HTMLFormElement>) {
+    e.preventDefault();
+    setImportError("");
+    setImportBusy(true);
+    try {
+      const parsed = await importRecipeFromUrl({ data: { url: importUrl.trim() } });
+      if (!parsed) {
+        setImportError("Не нашли рецепт в разметке сайта. Попробуйте другой адрес.");
+        return;
+      }
+      setTitle(parsed.title);
+      setIngredients(
+        parsed.ingredients.length
+          ? parsed.ingredients.map((i) => ({ name: i.name, amount: i.amount }))
+          : [{ name: "", amount: "" }],
+      );
+      setInstructions(parsed.instructions);
+      setImportUrl("");
+      setImportError("");
+    } catch (err) {
+      setImportError(String(err instanceof Error ? err.message : err).slice(0, 160));
+    } finally {
+      setImportBusy(false);
+    }
+  }
 
   async function onPhotoChange(e: ChangeEvent<HTMLInputElement>) {
     const file = e.target.files?.[0];
@@ -974,6 +1075,32 @@ function RecipeForm({
           ? "Обновите описание блюда — изменения сразу появятся в каталоге"
           : "Опишите блюдо, добавьте фото и пищевую ценность — рецепт появится в вашей коллекции"}
       </p>
+      {!isEdit ? (
+        <form onSubmit={onImportUrl} className="mb-6 max-w-xl rounded-lg bg-paper p-4">
+          <p className="text-sm font-medium">Импорт по ссылке</p>
+          <p className="mt-1 text-xs text-muted">
+            Вставьте адрес рецепта с любого кулинарного сайта — ингредиенты и шаги подтянутся
+            в форму автоматически.
+          </p>
+          <div className="mt-3 flex flex-wrap gap-2">
+            <input
+              type="url"
+              value={importUrl}
+              onChange={(e) => setImportUrl(e.target.value)}
+              placeholder="https://сайт.ru/рецепт/"
+              className="min-h-11 min-w-56 flex-1 rounded-md border border-line bg-cream px-3 text-sm"
+            />
+            <button
+              type="submit"
+              disabled={importBusy || importUrl.trim().length === 0}
+              className="min-h-11 rounded-full bg-ink px-5 text-sm font-medium text-cream disabled:opacity-40"
+            >
+              {importBusy ? "Читаем…" : "Импортировать"}
+            </button>
+          </div>
+          {importError ? <p className="mt-2 text-xs text-red-700">{importError}</p> : null}
+        </form>
+      ) : null}
       <form onSubmit={handleSubmit} className="max-w-xl space-y-4">
         <label className="block text-sm">
           Название

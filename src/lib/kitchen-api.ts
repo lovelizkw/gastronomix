@@ -10,6 +10,30 @@ export type ProductRow = {
   qty: string;
   /** Срок годности в формате YYYY-MM-DD либо null, если не указан. */
   expiresAt: string | null;
+  /** Дата добавления (YYYY-MM-DD) — для шкалы свежести. */
+  createdAt: string | null;
+};
+
+/** Событие жизненного цикла продукта — основа аналитики «Ноль отходов». */
+type ProductEventAction = "added" | "cooked" | "discarded";
+
+/** Аналитика «Ноль отходов» за месяц. */
+export type WasteStats = {
+  cookedGrams: number;
+  savedMoney: number; // оценка: 300 ₽ за кг спасённой еды
+  discardedGrams: number;
+  zeroWasteScore: number; // 0–100: доля спасённой еды
+  topBought: { name: string; grams: number }[];
+  topDiscarded: { name: string; grams: number }[];
+};
+
+/** КБЖУ, приготовленное за один день недели. */
+export type KbjuDay = {
+  day: string; // YYYY-MM-DD
+  k: number;
+  b: number;
+  j: number;
+  u: number;
 };
 
 /** Ингредиент рецепта: название + количество («200 г», «3 шт»). */
@@ -212,7 +236,8 @@ export const listProducts = createServerFn({ method: "GET" })
   .handler(async ({ context }) => {
     const sql = await getSql();
     return sql<ProductRow>`
-      select id, name, category, qty, expires_at::text as "expiresAt"
+      select id, name, category, qty, expires_at::text as "expiresAt",
+             created_at::date::text as "createdAt"
       from products
       where user_id = ${context.userId}
       order by id desc
@@ -224,6 +249,33 @@ function todayIso(): string {
   const now = new Date();
   const pad = (n: number) => String(n).padStart(2, "0");
   return `${now.getFullYear()}-${pad(now.getMonth() + 1)}-${pad(now.getDate())}`;
+}
+
+/** Записывает событие продукта (основа аналитики «Ноль отходов»). */
+async function logProductEvent(
+  sql: Sql,
+  userId: string,
+  productName: string,
+  action: ProductEventAction,
+  grams: number,
+): Promise<void> {
+  await sql`
+    insert into product_events (user_id, product_name, action, grams)
+    values (${userId}, ${productName}, ${action}, ${Math.max(0, Math.round(grams))})
+  `;
+}
+
+/** Записывает приготовленный рецепт в журнал готовки. */
+async function logCookedRecipe(
+  sql: Sql,
+  userId: string,
+  recipe: { id: number; title: string; portions: number; kbju: { k: number; b: number; j: number; u: number } },
+): Promise<void> {
+  await sql`
+    insert into cook_log (user_id, recipe_id, title, portions, kcal, protein, fat, carbs)
+    values (${userId}, ${recipe.id}, ${recipe.title}, ${recipe.portions},
+            ${recipe.kbju.k}, ${recipe.kbju.b}, ${recipe.kbju.j}, ${recipe.kbju.u})
+  `;
 }
 
 const productSchema = z.object({
@@ -247,8 +299,10 @@ export const addProduct = createServerFn({ method: "POST" })
     const rows = await sql<ProductRow>`
       insert into products (user_id, name, category, qty, expires_at)
       values (${context.userId}, ${data.name}, ${data.category}, ${data.qty}, ${expiresAt})
-      returning id, name, category, qty, expires_at::text as "expiresAt"
+      returning id, name, category, qty, expires_at::text as "expiresAt",
+                created_at::date::text as "createdAt"
     `;
+    await logProductEvent(sql, context.userId, data.name, "added", parseAmount(data.qty)?.value ?? 0);
     return rows[0];
   });
 
@@ -267,9 +321,11 @@ export const addProductsBulk = createServerFn({ method: "POST" })
       const rows = await sql<ProductRow>`
         insert into products (user_id, name, category, qty, expires_at)
         values (${context.userId}, ${item.name}, ${item.category}, ${item.qty}, ${expiresAt})
-        returning id, name, category, qty, expires_at::text as "expiresAt"
+        returning id, name, category, qty, expires_at::text as "expiresAt",
+                  created_at::date::text as "createdAt"
       `;
       inserted.push(rows[0]);
+      await logProductEvent(sql, context.userId, item.name, "added", parseAmount(item.qty)?.value ?? 0);
     }
     return inserted;
   });
@@ -279,10 +335,21 @@ export const removeProduct = createServerFn({ method: "POST" })
   .validator(z.object({ id: z.number().int() }))
   .handler(async ({ context, data }) => {
     const sql = await getSql();
-    await sql`
+    const removed = await sql<{ name: string; qty: string }>`
       delete from products
       where id = ${data.id} and user_id = ${context.userId}
+      returning name, qty
     `;
+    if (removed.length > 0) {
+      // Ручное удаление считается выбрасыванием — учитывается в «Ноль отходов».
+      await logProductEvent(
+        sql,
+        context.userId,
+        removed[0].name,
+        "discarded",
+        parseAmount(removed[0].qty)?.value ?? 0,
+      );
+    }
     return { ok: true as const };
   });
 
@@ -864,8 +931,17 @@ export const cookRecipe = createServerFn({ method: "POST" })
         `;
         used.push({ name: match.name, deducted: `${amount.value} ${unit}` });
       }
+      // Готовка = спасённая еда: идёт в аналитику «Ноль отходов».
+      await logProductEvent(
+        sql,
+        context.userId,
+        match.name,
+        "cooked",
+        amount.unit === "pc" ? 0 : amount.value,
+      );
     }
 
+    await logCookedRecipe(sql, context.userId, recipe);
     return { used, missing, skipped };
   });
 
@@ -1085,4 +1161,283 @@ export const getShoppingList = createServerFn({ method: "GET" })
     }
     items.sort((a, b) => a.category.localeCompare(b.category) || a.name.localeCompare(b.name));
     return items;
+  });
+
+/* ===================== Умные замены «Чем заменить?» ================= */
+
+/** Разбирает строку «200 г муки» или «мука — 200 г» на пару имя + количество. */
+function parseRawIngredient(raw: string): { name: string; amount: string } {
+  const text = raw.trim();
+  const match = text.match(
+    /^(.*?)(\d+(?:[.,]\d+)?)\s*(г|гр|кг|мл|л|шт|ст\.?\s*л|ч\.?\s*л|стакан[a-z]*|ложки|ложек|щепотка|по вкусу)[\s.,]*/i,
+  );
+  if (!match) return { name: text.slice(0, 80) || "ингредиент", amount: "" };
+  const before = match[1].trim();
+  const unit = match[3];
+  const amount = `${match[2].replace(",", ".")} ${unit}`;
+  // Название — текст до количества или после него (какой не пустой).
+  const after = text.slice((match.index ?? 0) + match[0].length).trim();
+  const name = (before.length >= after.length ? after : before) || before || "ингредиент";
+  return { name: name.replace(/[—–-]+$/, "").trim().slice(0, 80) || "ингредиент", amount };
+}
+
+/**
+ * Импорт рецепта по ссылке: страница кулинарного сайта разбирается на месте,
+ * из разметки schema.org (JSON-LD) вытаскиваются название, ингредиенты и шаги.
+ */
+export const importRecipeFromUrl = createServerFn({ method: "POST" })
+  .middleware([authMiddleware])
+  .validator(z.object({ url: z.string().trim().url().max(500) }))
+  .handler(async ({ data }) => {
+    let html: string;
+    try {
+      const res = await fetch(data.url, {
+        headers: {
+          "User-Agent": "Gastronomix/1.0 (educational project)",
+          Accept: "text/html",
+        },
+        signal: AbortSignal.timeout(15000),
+      });
+      if (!res.ok) throw new Error(`сайт ответил ${res.status}`);
+      html = await res.text();
+    } catch (e) {
+      throw new Error(
+        `Не удалось открыть страницу: ${String(e).slice(0, 140)}`,
+      );
+    }
+
+    // Ищем блоки JSON-LD и внутри них объект типа Recipe (в т.ч. в @graph).
+    const blocks = [
+      ...html.matchAll(
+        /<script[^>]*type=["']application\/ld\+json["'][^>]*>([\s\S]*?)<\/script>/gi,
+      ),
+    ];
+    for (const block of blocks) {
+      let json: unknown;
+      try {
+        json = JSON.parse(block[1].trim());
+      } catch {
+        continue;
+      }
+      const nodes = Array.isArray(json)
+        ? json
+        : typeof json === "object" && json !== null && "@graph" in json
+          ? (json as { "@graph": unknown[] })["@graph"]
+          : [json];
+      const recipe = (nodes as Record<string, unknown>[]).find((node) =>
+        String(node?.["@type"] ?? "").toLowerCase().includes("recipe"),
+      );
+      if (!recipe) continue;
+
+      const title = String(recipe.name ?? "").slice(0, 80);
+      const rawIngredients = Array.isArray(recipe.recipeIngredient)
+        ? (recipe.recipeIngredient as string[])
+        : [];
+      const ingredients = rawIngredients.slice(0, 30).map(parseRawIngredient);
+      if (!title || ingredients.length === 0) continue;
+
+      let steps: string[] = [];
+      const raw = recipe.recipeInstructions;
+      if (typeof raw === "string") {
+        steps = raw.split(/\r?\n/);
+      } else if (Array.isArray(raw)) {
+        steps = (raw as unknown[])
+          .map((s) =>
+            typeof s === "string"
+              ? s
+              : typeof s === "object" && s !== null && "text" in s
+                ? String((s as { text: unknown }).text)
+                : "",
+          )
+          .filter(Boolean);
+      }
+      const instructions = steps
+        .slice(0, 20)
+        .map((s, i) => `${i + 1}. ${s.replace(/^\d+[.)]\s*/, "").slice(0, 200)}`)
+        .join("\n");
+
+      return {
+        title,
+        ingredients,
+        instructions: instructions.slice(0, 2000),
+      };
+    }
+    return null;
+  });
+
+/* ===================== Аналитика «Ноль отходов» ====================== */
+
+export type SubstituteMap = Record<string, string[]>;
+
+type SubstituteDb = { ingredient: string; substitutes: unknown };
+
+/** Таблица эквивалентов из PostgreSQL: «нет сметаны → греческий йогурт». */
+export const getSubstitutes = createServerFn({ method: "GET" })
+  .middleware([authMiddleware])
+  .handler(async () => {
+    const sql = await getSql();
+    const rows = await sql<SubstituteDb>`
+      select ingredient, substitutes from ingredient_substitutes
+    `;
+    const map: SubstituteMap = {};
+    for (const row of rows) {
+      map[row.ingredient.toLowerCase()] = parseJsonArray(row.substitutes);
+    }
+    return map;
+  });
+
+/** Собранный в конструкторе ингредиент боула. */
+export type BowlItem = { name: string; grams: number };
+
+/** Ориентировочная КБЖУ на 100 г для конструктора (по названию продукта). */
+export function productKbju(name: string): { k: number; b: number; j: number; u: number } {
+  const lower = name.toLowerCase();
+  const table: [RegExp, { k: number; b: number; j: number; u: number }][] = [
+    [/рис/, { k: 344, b: 7, j: 1, u: 74 }],
+    [/гречк/, { k: 343, b: 13, j: 3, u: 68 }],
+    [/макарон|спагетти|лапша/, { k: 350, b: 12, j: 1, u: 71 }],
+    [/булгур|перлов/, { k: 330, b: 11, j: 1, u: 68 }],
+    [/кури|индейк/, { k: 165, b: 31, j: 4, u: 0 }],
+    [/фарш|свинин/, { k: 260, b: 17, j: 20, u: 0 }],
+    [/рыба|лосось|тунец/, { k: 150, b: 23, j: 5, u: 0 }],
+    [/яйц/, { k: 157, b: 13, j: 12, u: 1 }],
+    [/творог/, { k: 100, b: 17, j: 2, u: 3 }],
+    [/сыр/, { k: 350, b: 25, j: 27, u: 2 }],
+    [/тофу/, { k: 80, b: 9, j: 5, u: 2 }],
+    [/фасол|горох|чечевиц/, { k: 300, b: 21, j: 1, u: 50 }],
+    [/масло/, { k: 750, b: 1, j: 82, u: 1 }],
+    [/сметан|майонез/, { k: 300, b: 3, j: 30, u: 4 }],
+    [/авокадо/, { k: 160, b: 2, j: 15, u: 9 }],
+  ];
+  for (const [pattern, value] of table) {
+    if (pattern.test(lower)) return value;
+  }
+  return { k: 60, b: 2, j: 1, u: 10 };
+}
+
+/**
+ * Списывает выбранные в конструкторе продукты из холодильника
+ * и записывает их как спасённую еду (та же аналитика, что у рецептов).
+ */
+export const cookCustomBowl = createServerFn({ method: "POST" })
+  .middleware([authMiddleware])
+  .validator(z.object({ items: z.array(z.object({ name: z.string().trim().min(1).max(80), grams: z.number().int().min(0).max(3000) })).min(1).max(12) }))
+  .handler(async ({ context, data }) => {
+    const sql = await getSql();
+    const products = await sql<{ id: number; name: string; qty: string }>`
+      select id, name, qty from products where user_id = ${context.userId}
+    `;
+    const used: string[] = [];
+    const missing: string[] = [];
+    for (const item of data.items) {
+      if (item.grams <= 0) continue;
+      const needle = item.name.toLowerCase();
+      const match = products.find((p) => {
+        const name = p.name.toLowerCase();
+        return name.includes(needle) || needle.includes(name);
+      });
+      if (!match) {
+        missing.push(item.name);
+        continue;
+      }
+      const have = parseAmount(match.qty);
+      if (!have || have.unit !== "g" || have.value <= item.grams) {
+        await sql`delete from products where id = ${match.id} and user_id = ${context.userId}`;
+        used.push(`${match.name} (−${have ? `${have.value} г` : match.qty})`);
+      } else {
+        await sql`
+          update products set qty = ${`${have.value - item.grams} г`}
+          where id = ${match.id} and user_id = ${context.userId}
+        `;
+        used.push(`${match.name} (−${item.grams} г)`);
+      }
+      await logProductEvent(sql, context.userId, match.name, "cooked", item.grams);
+    }
+    const totalK = data.items.reduce((s, i) => s + (productKbju(i.name).k * i.grams) / 100, 0);
+    return { used, missing, kcal: Math.round(totalK) };
+  });
+
+/* ===================== Аналитика «Ноль отходов» ====================== */
+
+/** Оценка стоимости спасённой еды: 300 ₽ за килограмм. */
+const MONEY_PER_GRAM = 0.3;
+
+type EventsDb = {
+  action: string;
+  grams: number;
+  product_name: string;
+};
+
+export const getWasteStats = createServerFn({ method: "GET" })
+  .middleware([authMiddleware])
+  .handler(async ({ context }) => {
+    const sql = await getSql();
+    const rows = await sql<EventsDb>`
+      select action, grams, product_name
+      from product_events
+      where user_id = ${context.userId}
+        and created_at >= now() - interval '30 days'
+    `;
+
+    let cooked = 0;
+    let discarded = 0;
+    const bought = new Map<string, number>();
+    const thrown = new Map<string, number>();
+    for (const row of rows) {
+      const grams = Number(row.grams) || 0;
+      if (row.action === "cooked") cooked += grams;
+      if (row.action === "discarded") {
+        discarded += grams;
+        thrown.set(row.product_name, (thrown.get(row.product_name) ?? 0) + grams);
+      }
+      if (row.action === "added") {
+        bought.set(row.product_name, (bought.get(row.product_name) ?? 0) + grams);
+      }
+    }
+    const top = (m: Map<string, number>) =>
+      [...m.entries()]
+        .map(([name, grams]) => ({ name, grams }))
+        .sort((a, b) => b.grams - a.grams)
+        .slice(0, 5);
+    const total = cooked + discarded;
+    return {
+      cookedGrams: cooked,
+      savedMoney: Math.round(cooked * MONEY_PER_GRAM),
+      discardedGrams: discarded,
+      zeroWasteScore: total > 0 ? Math.round((cooked / total) * 100) : 100,
+      topBought: top(bought),
+      topDiscarded: top(thrown),
+    } satisfies WasteStats;
+  });
+
+type CookLogDb = {
+  day: string;
+  kcal: number;
+  protein: number;
+  fat: number;
+  carbs: number;
+};
+
+/** КБЖУ по дням за последние 7 дней — для недельного графика. */
+export const getWeekKbju = createServerFn({ method: "GET" })
+  .middleware([authMiddleware])
+  .handler(async ({ context }) => {
+    const sql = await getSql();
+    const rows = await sql<CookLogDb>`
+      select cooked_at::date::text as day,
+             sum(kcal)::int as kcal, sum(protein)::int as protein,
+             sum(fat)::int as fat, sum(carbs)::int as carbs
+      from cook_log
+      where user_id = ${context.userId}
+        and cooked_at >= now() - interval '7 days'
+      group by cooked_at::date
+      order by cooked_at::date
+    `;
+    return rows.map((r) => ({
+      day: r.day,
+      k: Number(r.kcal) || 0,
+      b: Number(r.protein) || 0,
+      j: Number(r.fat) || 0,
+      u: Number(r.carbs) || 0,
+    }));
   });

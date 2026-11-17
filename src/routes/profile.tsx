@@ -1,9 +1,28 @@
 import { createFileRoute, Link } from "@tanstack/react-router";
 import { FormEvent, useEffect, useState } from "react";
+import {
+  Bar,
+  BarChart,
+  CartesianGrid,
+  ResponsiveContainer,
+  Tooltip,
+  XAxis,
+  YAxis,
+} from "recharts";
 import { RedirectToSignIn } from "@/lib/auth/gates";
 import { useCurrentUserState } from "@/lib/auth/use-current-user";
 import { signOut } from "@/lib/auth/client";
-import { getPreferences, getProfile, updateProfile, type Preferences, type ProfileRow } from "@/lib/kitchen-api";
+import {
+  getPreferences,
+  getProfile,
+  getWeekKbju,
+  getWasteStats,
+  updateProfile,
+  type KbjuDay,
+  type Preferences,
+  type ProfileRow,
+  type WasteStats,
+} from "@/lib/kitchen-api";
 
 export const Route = createFileRoute("/profile")({ component: ProfilePage });
 
@@ -22,6 +41,8 @@ function ProfilePage() {
   const userId = user?.id ?? null;
   const [profile, setProfile] = useState<ProfileRow | null>(null);
   const [prefs, setPrefs] = useState<Preferences | null>(null);
+  const [waste, setWaste] = useState<WasteStats | null>(null);
+  const [week, setWeek] = useState<KbjuDay[]>([]);
   const [loading, setLoading] = useState(true);
   const [name, setName] = useState("");
   const [busy, setBusy] = useState(false);
@@ -43,6 +64,16 @@ function ProfilePage() {
     getPreferences()
       .then((row) => {
         if (!cancelled) setPrefs(row);
+      })
+      .catch(() => null);
+    getWasteStats()
+      .then((row) => {
+        if (!cancelled) setWaste(row);
+      })
+      .catch(() => null);
+    getWeekKbju()
+      .then((rows) => {
+        if (!cancelled) setWeek(rows);
       })
       .catch(() => null);
     return () => {
@@ -103,6 +134,7 @@ function ProfilePage() {
             <p className="font-serif text-3xl">Профиль недоступен</p>
           </div>
         ) : (
+          <>
           <div className="mt-8 grid gap-8 md:grid-cols-2">
             <section className="rounded-lg bg-paper p-6 md:p-8">
               <h2 className="font-serif text-2xl">Данные аккаунта</h2>
@@ -186,9 +218,115 @@ function ProfilePage() {
               </Link>
             </section>
           </div>
+
+          {waste ? (
+            <section className="mt-8 rounded-lg bg-paper p-6 md:p-8">
+              <div className="flex flex-wrap items-end justify-between gap-4">
+                <div>
+                  <h2 className="font-serif text-2xl">Ноль отходов</h2>
+                  <p className="mt-1 text-sm text-muted">Ваша еда за последний месяц.</p>
+                </div>
+                <div className="text-right">
+                  <p className="font-display text-5xl font-light text-sage-deep">
+                    {waste.zeroWasteScore}
+                  </p>
+                  <p className="text-xs text-muted">индекс из 100</p>
+                </div>
+              </div>
+
+              <div className="mt-6 grid gap-6 md:grid-cols-3">
+                <div className="rounded-lg bg-cream p-5">
+                  <p className="text-xs uppercase tracking-wide text-muted">Спасено продуктов</p>
+                  <p className="mt-2 font-display text-4xl font-light text-sage-deep">
+                    {(waste.cookedGrams / 1000).toFixed(1)} кг
+                  </p>
+                  <p className="mt-1 text-sm text-muted">
+                    ≈ {waste.savedMoney.toLocaleString("ru-RU")} ₽ сэкономлено
+                  </p>
+                </div>
+                <div className="rounded-lg bg-cream p-5">
+                  <p className="text-xs uppercase tracking-wide text-muted">Выброшено</p>
+                  <p className="mt-2 font-display text-4xl font-light text-blush-deep">
+                    {(waste.discardedGrams / 1000).toFixed(1)} кг
+                  </p>
+                  <p className="mt-1 text-sm text-muted">
+                    готовьте вовремя — и это число уменьшится
+                  </p>
+                </div>
+                <div className="rounded-lg bg-cream p-5">
+                  <p className="text-xs uppercase tracking-wide text-muted">Как считаем</p>
+                  <p className="mt-2 text-sm text-muted">
+                    «Спасено» — продукты, списанные кнопкой «Я приготовил это».
+                    Деньги — оценка 300 ₽ за кг.
+                  </p>
+                </div>
+              </div>
+
+              <div className="mt-8 grid gap-8 lg:grid-cols-2">
+                <div>
+                  <h3 className="font-serif text-xl">КБЖУ за неделю</h3>
+                  {week.length === 0 ? (
+                    <p className="mt-3 text-sm text-muted">
+                      Готовьте по рецептам — здесь появится график.
+                    </p>
+                  ) : (
+                    <div className="mt-4 h-56">
+                      <ResponsiveContainer width="100%" height="100%">
+                        <BarChart data={week}>
+                          <CartesianGrid strokeDasharray="3 3" stroke="#1c191712" />
+                          <XAxis
+                            dataKey="day"
+                            tickFormatter={(v: string) => v.slice(5)}
+                            fontSize={11}
+                          />
+                          <YAxis fontSize={11} />
+                          <Tooltip />
+                          <Bar dataKey="k" name="Ккал" fill="#7e9854" radius={[4, 4, 0, 0]} />
+                          <Bar dataKey="b" name="Белки, г" fill="#8e88c0" radius={[4, 4, 0, 0]} />
+                          <Bar dataKey="j" name="Жиры, г" fill="#e8a39d" radius={[4, 4, 0, 0]} />
+                          <Bar dataKey="u" name="Углеводы, г" fill="#c5c0e3" radius={[4, 4, 0, 0]} />
+                        </BarChart>
+                      </ResponsiveContainer>
+                    </div>
+                  )}
+                </div>
+                <div className="grid gap-6 sm:grid-cols-2">
+                  <div>
+                    <h3 className="font-serif text-lg">Чаще покупаете</h3>
+                    <TopList items={waste.topBought} empty="Пока нет покупок." />
+                  </div>
+                  <div>
+                    <h3 className="font-serif text-lg">Чаще выбрасываете</h3>
+                    <TopList items={waste.topDiscarded} empty="Ничего не выбрасывали." />
+                  </div>
+                </div>
+              </div>
+            </section>
+          ) : null}
+          </>
         )}
       </div>
     </main>
+  );
+}
+
+function TopList({
+  items,
+  empty,
+}: {
+  items: { name: string; grams: number }[];
+  empty: string;
+}) {
+  if (items.length === 0) return <p className="mt-3 text-sm text-muted">{empty}</p>;
+  return (
+    <ul className="mt-3 space-y-2">
+      {items.map((item) => (
+        <li key={item.name} className="flex items-baseline justify-between gap-3 text-sm">
+          <span>{item.name}</span>
+          <span className="text-muted">{(item.grams / 1000).toFixed(1)} кг</span>
+        </li>
+      ))}
+    </ul>
   );
 }
 
