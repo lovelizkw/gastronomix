@@ -30,7 +30,7 @@ function RegisterPage() {
       setError(err.message || "Не получилось создать аккаунт");
       return;
     }
-    await navigate({ to: "/kitchen" });
+    await navigate({ to: "/preferences" });
   }
 
   return (

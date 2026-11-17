@@ -3,7 +3,7 @@ import { FormEvent, useEffect, useState } from "react";
 import { RedirectToSignIn } from "@/lib/auth/gates";
 import { useCurrentUserState } from "@/lib/auth/use-current-user";
 import { signOut } from "@/lib/auth/client";
-import { getProfile, updateProfile, type ProfileRow } from "@/lib/kitchen-api";
+import { getPreferences, getProfile, updateProfile, type Preferences, type ProfileRow } from "@/lib/kitchen-api";
 
 export const Route = createFileRoute("/profile")({ component: ProfilePage });
 
@@ -21,6 +21,7 @@ function ProfilePage() {
   const { user, isPending } = useCurrentUserState();
   const userId = user?.id ?? null;
   const [profile, setProfile] = useState<ProfileRow | null>(null);
+  const [prefs, setPrefs] = useState<Preferences | null>(null);
   const [loading, setLoading] = useState(true);
   const [name, setName] = useState("");
   const [busy, setBusy] = useState(false);
@@ -39,6 +40,11 @@ function ProfilePage() {
       .finally(() => {
         if (!cancelled) setLoading(false);
       });
+    getPreferences()
+      .then((row) => {
+        if (!cancelled) setPrefs(row);
+      })
+      .catch(() => null);
     return () => {
       cancelled = true;
     };
@@ -144,9 +150,37 @@ function ProfilePage() {
                 <Stat label="Продуктов в холодильнике" value={profile.products} />
                 <Stat label="Рецептов в избранном" value={profile.favorites} />
               </dl>
+
+              <div className="mt-8 border-t border-line pt-6">
+                <h3 className="font-serif text-xl">Предпочтения</h3>
+                {prefs && (prefs.allergens.length > 0 || prefs.diets.length > 0 || prefs.stopList.length > 0) ? (
+                  <ul className="mt-3 space-y-1 text-sm text-muted">
+                    {prefs.allergens.length > 0 ? (
+                      <li>Аллергены: {prefs.allergens.join(", ")}</li>
+                    ) : null}
+                    {prefs.diets.length > 0 ? (
+                      <li>Диеты: {prefs.diets.join(", ")}</li>
+                    ) : null}
+                    {prefs.stopList.length > 0 ? (
+                      <li>Стоп-лист: {prefs.stopList.join(", ")}</li>
+                    ) : null}
+                  </ul>
+                ) : (
+                  <p className="mt-3 text-sm text-muted">
+                    Ограничения не настроены — выдача показывает все блюда.
+                  </p>
+                )}
+                <Link
+                  to="/preferences"
+                  className="mt-4 inline-flex min-h-11 items-center rounded-full border border-line bg-cream px-5 text-sm font-medium text-ink"
+                >
+                  Изменить предпочтения
+                </Link>
+              </div>
+
               <Link
                 to="/kitchen"
-                className="mt-8 inline-flex min-h-12 items-center rounded-full bg-blush px-6 font-medium text-ink"
+                className="mt-6 inline-flex min-h-12 items-center rounded-full bg-blush px-6 font-medium text-ink"
               >
                 Перейти на кухню
               </Link>

@@ -12,8 +12,11 @@ import { Route as rootRouteImport } from './routes/__root'
 import { Route as IndexRouteImport } from './routes/index'
 import { Route as KitchenRouteImport } from './routes/kitchen'
 import { Route as LoginRouteImport } from './routes/login'
+import { Route as MenuRouteImport } from './routes/menu'
+import { Route as PreferencesRouteImport } from './routes/preferences'
 import { Route as ProfileRouteImport } from './routes/profile'
 import { Route as RegisterRouteImport } from './routes/register'
+import { Route as ShoppingRouteImport } from './routes/shopping'
 import { Route as VhodRouteImport } from './routes/vhod'
 import { Route as RecipesRecipeIdRouteImport } from './routes/recipes.$recipeId'
 import { Route as ApiAuthSplatRouteImport } from './routes/api/auth/$'
@@ -33,6 +36,16 @@ const LoginRoute = LoginRouteImport.update({
   path: '/login',
   getParentRoute: () => rootRouteImport,
 } as any)
+const MenuRoute = MenuRouteImport.update({
+  id: '/menu',
+  path: '/menu',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const PreferencesRoute = PreferencesRouteImport.update({
+  id: '/preferences',
+  path: '/preferences',
+  getParentRoute: () => rootRouteImport,
+} as any)
 const ProfileRoute = ProfileRouteImport.update({
   id: '/profile',
   path: '/profile',
@@ -41,6 +54,11 @@ const ProfileRoute = ProfileRouteImport.update({
 const RegisterRoute = RegisterRouteImport.update({
   id: '/register',
   path: '/register',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const ShoppingRoute = ShoppingRouteImport.update({
+  id: '/shopping',
+  path: '/shopping',
   getParentRoute: () => rootRouteImport,
 } as any)
 const VhodRoute = VhodRouteImport.update({
@@ -63,8 +81,11 @@ export interface FileRoutesByFullPath {
   '/': typeof IndexRoute
   '/kitchen': typeof KitchenRoute
   '/login': typeof LoginRoute
+  '/menu': typeof MenuRoute
+  '/preferences': typeof PreferencesRoute
   '/profile': typeof ProfileRoute
   '/register': typeof RegisterRoute
+  '/shopping': typeof ShoppingRoute
   '/vhod': typeof VhodRoute
   '/recipes/$recipeId': typeof RecipesRecipeIdRoute
   '/api/auth/$': typeof ApiAuthSplatRoute
@@ -73,8 +94,11 @@ export interface FileRoutesByTo {
   '/': typeof IndexRoute
   '/kitchen': typeof KitchenRoute
   '/login': typeof LoginRoute
+  '/menu': typeof MenuRoute
+  '/preferences': typeof PreferencesRoute
   '/profile': typeof ProfileRoute
   '/register': typeof RegisterRoute
+  '/shopping': typeof ShoppingRoute
   '/vhod': typeof VhodRoute
   '/recipes/$recipeId': typeof RecipesRecipeIdRoute
   '/api/auth/$': typeof ApiAuthSplatRoute
@@ -84,8 +108,11 @@ export interface FileRoutesById {
   '/': typeof IndexRoute
   '/kitchen': typeof KitchenRoute
   '/login': typeof LoginRoute
+  '/menu': typeof MenuRoute
+  '/preferences': typeof PreferencesRoute
   '/profile': typeof ProfileRoute
   '/register': typeof RegisterRoute
+  '/shopping': typeof ShoppingRoute
   '/vhod': typeof VhodRoute
   '/recipes/$recipeId': typeof RecipesRecipeIdRoute
   '/api/auth/$': typeof ApiAuthSplatRoute
@@ -96,8 +123,11 @@ export interface FileRouteTypes {
     | '/'
     | '/kitchen'
     | '/login'
+    | '/menu'
+    | '/preferences'
     | '/profile'
     | '/register'
+    | '/shopping'
     | '/vhod'
     | '/recipes/$recipeId'
     | '/api/auth/$'
@@ -106,8 +136,11 @@ export interface FileRouteTypes {
     | '/'
     | '/kitchen'
     | '/login'
+    | '/menu'
+    | '/preferences'
     | '/profile'
     | '/register'
+    | '/shopping'
     | '/vhod'
     | '/recipes/$recipeId'
     | '/api/auth/$'
@@ -116,8 +149,11 @@ export interface FileRouteTypes {
     | '/'
     | '/kitchen'
     | '/login'
+    | '/menu'
+    | '/preferences'
     | '/profile'
     | '/register'
+    | '/shopping'
     | '/vhod'
     | '/recipes/$recipeId'
     | '/api/auth/$'
@@ -127,8 +163,11 @@ export interface RootRouteChildren {
   IndexRoute: typeof IndexRoute
   KitchenRoute: typeof KitchenRoute
   LoginRoute: typeof LoginRoute
+  MenuRoute: typeof MenuRoute
+  PreferencesRoute: typeof PreferencesRoute
   ProfileRoute: typeof ProfileRoute
   RegisterRoute: typeof RegisterRoute
+  ShoppingRoute: typeof ShoppingRoute
   VhodRoute: typeof VhodRoute
   RecipesRecipeIdRoute: typeof RecipesRecipeIdRoute
   ApiAuthSplatRoute: typeof ApiAuthSplatRoute
@@ -157,6 +196,20 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof LoginRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/menu': {
+      id: '/menu'
+      path: '/menu'
+      fullPath: '/menu'
+      preLoaderRoute: typeof MenuRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/preferences': {
+      id: '/preferences'
+      path: '/preferences'
+      fullPath: '/preferences'
+      preLoaderRoute: typeof PreferencesRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/profile': {
       id: '/profile'
       path: '/profile'
@@ -169,6 +222,13 @@ declare module '@tanstack/react-router' {
       path: '/register'
       fullPath: '/register'
       preLoaderRoute: typeof RegisterRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/shopping': {
+      id: '/shopping'
+      path: '/shopping'
+      fullPath: '/shopping'
+      preLoaderRoute: typeof ShoppingRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/vhod': {
@@ -199,8 +259,11 @@ const rootRouteChildren: RootRouteChildren = {
   IndexRoute: IndexRoute,
   KitchenRoute: KitchenRoute,
   LoginRoute: LoginRoute,
+  MenuRoute: MenuRoute,
+  PreferencesRoute: PreferencesRoute,
   ProfileRoute: ProfileRoute,
   RegisterRoute: RegisterRoute,
+  ShoppingRoute: ShoppingRoute,
   VhodRoute: VhodRoute,
   RecipesRecipeIdRoute: RecipesRecipeIdRoute,
   ApiAuthSplatRoute: ApiAuthSplatRoute,

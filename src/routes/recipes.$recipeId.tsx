@@ -2,7 +2,7 @@ import { createFileRoute, Link } from "@tanstack/react-router";
 import { useEffect, useState } from "react";
 import { RedirectToSignIn } from "@/lib/auth/gates";
 import { useCurrentUserState } from "@/lib/auth/use-current-user";
-import { getRecipe, toggleFavorite, type RecipeRow } from "@/lib/kitchen-api";
+import { cookRecipe, getRecipe, toggleFavorite, type RecipeRow } from "@/lib/kitchen-api";
 
 export const Route = createFileRoute("/recipes/$recipeId")({
   component: RecipePage,
@@ -15,6 +15,9 @@ function RecipePage() {
   const userId = user?.id ?? null;
   const [recipe, setRecipe] = useState<RecipeRow | null>(null);
   const [loading, setLoading] = useState(true);
+  const [cookMessage, setCookMessage] = useState("");
+  const [cookError, setCookError] = useState("");
+  const [cookBusy, setCookBusy] = useState(false);
 
   useEffect(() => {
     if (!userId || !Number.isFinite(id)) {
@@ -41,6 +44,30 @@ function RecipePage() {
     if (!recipe) return;
     const result = await toggleFavorite({ data: { id: recipe.id } });
     setRecipe({ ...recipe, favorite: result.favorite });
+  }
+
+  /** Автосписание: вычитает ингредиенты рецепта из холодильника. */
+  async function onCook() {
+    if (!recipe) return;
+    setCookMessage("");
+    setCookError("");
+    setCookBusy(true);
+    try {
+      const result = await cookRecipe({ data: { id: recipe.id } });
+      const usedText = result.used.map((u) => `${u.name} (−${u.deducted})`).join(", ");
+      const notes: string[] = [];
+      if (result.missing.length) notes.push(`не нашлось: ${result.missing.join(", ")}`);
+      if (result.skipped.length) notes.push(`не списано (единицы): ${result.skipped.join("; ")}`);
+      setCookMessage(
+        usedText || notes.length
+          ? [usedText ? `Списано: ${usedText}.` : "", ...notes].filter(Boolean).join(" ")
+          : "В рецепте нет ингредиентов с точным количеством.",
+      );
+    } catch {
+      setCookError("Не получилось списать продукты. Попробуйте ещё раз.");
+    } finally {
+      setCookBusy(false);
+    }
   }
 
   return (
@@ -94,19 +121,36 @@ function RecipePage() {
                   </h1>
                   <p className="mt-2 text-sm text-muted">
                     {recipe.timeLabel} · {recipe.portions} порц.
+                    {recipe.cuisine ? ` · ${recipe.cuisine} кухня` : ""}
                     {recipe.mine ? " · ваш рецепт" : " · каталог"}
                   </p>
                 </div>
-                <button
-                  type="button"
-                  onClick={onToggleFavorite}
-                  aria-pressed={recipe.favorite}
-                  className={`min-h-11 rounded-full px-5 text-sm font-medium ${
-                    recipe.favorite ? "bg-blush text-ink" : "bg-sage/50 text-ink"
-                  }`}
-                >
-                  {recipe.favorite ? "♥ В избранном" : "♡ В избранное"}
-                </button>
+                <div className="flex shrink-0 flex-col items-end gap-2">
+                  <button
+                    type="button"
+                    onClick={onToggleFavorite}
+                    aria-pressed={recipe.favorite}
+                    className={`min-h-11 rounded-full px-5 text-sm font-medium ${
+                      recipe.favorite ? "bg-blush text-ink" : "bg-sage/50 text-ink"
+                    }`}
+                  >
+                    {recipe.favorite ? "♥ В избранном" : "♡ В избранное"}
+                  </button>
+                  <button
+                    type="button"
+                    onClick={onCook}
+                    disabled={cookBusy}
+                    className="min-h-11 rounded-full bg-ink px-5 text-sm font-medium text-cream disabled:opacity-40"
+                  >
+                    {cookBusy ? "Списываем…" : "Я приготовил это"}
+                  </button>
+                  {cookMessage ? (
+                    <p className="max-w-xs text-right text-xs text-sage-deep">{cookMessage}</p>
+                  ) : null}
+                  {cookError ? (
+                    <p className="max-w-xs text-right text-xs text-red-700">{cookError}</p>
+                  ) : null}
+                </div>
               </div>
 
               <div className="mt-6 flex flex-wrap gap-2 text-sm font-medium">

@@ -1,23 +1,26 @@
 import { createFileRoute, Link } from "@tanstack/react-router";
-import { ChangeEvent, FormEvent, useEffect, useMemo, useState } from "react";
+import { ChangeEvent, FormEvent, useEffect, useMemo, useRef, useState } from "react";
 import { RedirectToSignIn } from "@/lib/auth/gates";
 import { useCurrentUserState } from "@/lib/auth/use-current-user";
 import { KitchenUser } from "@/components/site-nav";
 import {
   addProduct,
+  addProductsBulk,
   createRecipe,
   deleteRecipe,
+  getMenu,
   listProducts,
   listRecipes,
   removeProduct,
   toggleFavorite,
   updateRecipe,
   type IngredientItem,
+  type MenuSlot,
   type ProductRow,
   type RecipeFilters,
   type RecipeRow,
 } from "@/lib/kitchen-api";
-import { matchRecipes } from "@/lib/recipes";
+import { matchInfo, matchRecipes } from "@/lib/recipes";
 
 export const Route = createFileRoute("/kitchen")({ component: KitchenPage });
 
@@ -34,6 +37,35 @@ export type RecipeFormValues = {
   fat: number;
   carbs: number;
 };
+
+/** Подсказки категории «умной строки» по названию продукта. */
+const CATEGORY_HINTS: [RegExp, string][] = [
+  [/молок|сыр|сметан|творог|кефир|йогурт|ряженк/, "Молочное"],
+  [/куриц|индейк|мясо|фарш|свинин|говядин|бекон|ветчин|печен|колбас/, "Мясо"],
+  [/рыба|тунец|лосось|креветк|икра/, "Рыба"],
+  [/помидор|томат|огур|картоф|морков|лук|капуст|перец|кабач|свекл|чеснок|баклаж/, "Овощи"],
+  [/яблок|лимон|банан|апельсин|груш|виноград/, "Фрукты"],
+  [/хлеб|булк|сухарик|лаваш|круассан/, "Хлеб"],
+  [/мука|сахар|соль|специ|масло|сода|дрожж|корица|соус|горчица/, "Бакалея"],
+  [/яйц/, "Яйца"],
+  [/гречк|рис|макарон|спагетти|лапша|овсян|пшен|перлов|чечевиц|горох|манк/, "Крупы"],
+];
+
+function guessCategory(name: string): string {
+  const lower = name.toLowerCase();
+  for (const [pattern, category] of CATEGORY_HINTS) {
+    if (pattern.test(lower)) return category;
+  }
+  return "";
+}
+
+/** Дата через N дней в формате ГГГГ-ММ-ДД для поля срока годности. */
+function dateInDays(days: number): string {
+  const date = new Date();
+  date.setDate(date.getDate() + days);
+  const pad = (n: number) => String(n).padStart(2, "0");
+  return `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())}`;
+}
 
 /**
  * Превращает выбранный файл в компактный data-URL: уменьшает длинную сторону
@@ -80,11 +112,14 @@ function KitchenPage() {
   const [tab, setTab] = useState<"fridge" | "recipes" | "create">("fridge");
   const [products, setProducts] = useState<ProductRow[]>([]);
   const [recipes, setRecipes] = useState<RecipeRow[]>([]);
+  const [hidden, setHidden] = useState(0);
   const [filters, setFilters] = useState<RecipeFilters>({});
   const [loading, setLoading] = useState(true);
   const [recipesLoading, setRecipesLoading] = useState(false);
   const [open, setOpen] = useState(false);
+  const [pasteOpen, setPasteOpen] = useState(false);
   const [editing, setEditing] = useState<RecipeRow | null>(null);
+  const [menu, setMenu] = useState<MenuSlot[]>([]);
 
   // Зависимость — строковый id, а не объект user: useCurrentUserState
   // возвращает новый объект на каждый рендер, и эффект зацикливался.
@@ -98,6 +133,16 @@ function KitchenPage() {
       .finally(() => {
         if (!cancelled) setLoading(false);
       });
+    const monday = new Date();
+    const weekday = monday.getDay() || 7;
+    monday.setDate(monday.getDate() - (weekday - 1));
+    const pad = (n: number) => String(n).padStart(2, "0");
+    const iso = `${monday.getFullYear()}-${pad(monday.getMonth() + 1)}-${pad(monday.getDate())}`;
+    getMenu({ data: { weekStart: iso } })
+      .then((slots) => {
+        if (!cancelled) setMenu(slots);
+      })
+      .catch(() => null);
     return () => {
       cancelled = true;
     };
@@ -111,8 +156,11 @@ function KitchenPage() {
     setRecipesLoading(true);
     const timer = setTimeout(() => {
       listRecipes({ data: filters })
-        .then((r) => {
-          if (!cancelled) setRecipes(r);
+        .then((result) => {
+          if (!cancelled) {
+            setRecipes(result.recipes);
+            setHidden(result.hidden);
+          }
         })
         .finally(() => {
           if (!cancelled) setRecipesLoading(false);
@@ -124,10 +172,21 @@ function KitchenPage() {
     };
   }, [userId, filters]);
 
+  const productNames = useMemo(() => products.map((p) => p.name), [products]);
   const visibleRecipes = useMemo(
-    () => matchRecipes(recipes, products.map((p) => p.name)),
-    [recipes, products],
+    () => matchRecipes(recipes, productNames),
+    [recipes, productNames],
   );
+
+  // Сводка КБЖУ за сегодня из планировщика меню.
+  const todayKcal = useMemo(() => {
+    const pad = (n: number) => String(n).padStart(2, "0");
+    const now = new Date();
+    const today = `${now.getFullYear()}-${pad(now.getMonth() + 1)}-${pad(now.getDate())}`;
+    return menu
+      .filter((slot) => slot.day === today && slot.recipe)
+      .reduce((sum, slot) => sum + (slot.recipe?.kbju.k ?? 0), 0);
+  }, [menu]);
 
   if (isPending) return <main className="min-h-svh bg-cream" />;
   if (!user) return <RedirectToSignIn />;
@@ -141,10 +200,72 @@ function KitchenPage() {
         name: String(data.get("name") ?? ""),
         category: String(data.get("category") ?? ""),
         qty: String(data.get("qty") ?? ""),
+        expiresAt: String(data.get("expiresAt") ?? ""),
       },
     });
     if (row) setProducts((prev) => [row, ...prev]);
     setOpen(false);
+    form.reset();
+  }
+
+  /** Пресет «Базовый набор» — стандартная закупка одним нажатием. */
+  async function onAddPreset() {
+    const preset = [
+      { name: "хлеб", category: "Хлеб", qty: "1 буханка" },
+      { name: "яйца", category: "Яйца", qty: "10 шт" },
+      { name: "молоко", category: "Молочное", qty: "1 л" },
+      { name: "масло сливочное", category: "Молочное", qty: "180 г" },
+      { name: "куриное филе", category: "Мясо", qty: "500 г" },
+    ];
+    const today = new Date();
+    today.setDate(today.getDate() + 7);
+    const pad = (n: number) => String(n).padStart(2, "0");
+    const expiresAt = `${today.getFullYear()}-${pad(today.getMonth() + 1)}-${pad(today.getDate())}`;
+    const rows = await addProductsBulk({
+      data: { items: preset.map((p) => ({ ...p, expiresAt })) },
+    });
+    setProducts((prev) => [...rows, ...prev]);
+    setOpen(false);
+  }
+
+  /** Разбирает вставленный список: каждая строка — продукт, число — количество. */
+  function parsePastedList(text: string): { name: string; category: string; qty: string }[] {
+    const result: { name: string; category: string; qty: string }[] = [];
+    for (const rawLine of text.split(/\r?\n/)) {
+      const line = rawLine.trim().replace(/^[-*•–\s]+\s*/, "").replace(/^[0-9]+[.)]\s*/, "");
+      if (!line) continue;
+      const match = line.match(/^(.*?)\s*[-–—:]\s*(\d+[.,]?\d*\s*(?:г|гр|мл|шт|кг|л|упак)[^\s]*)$/i);
+      let name = line;
+      let qty = "";
+      if (match) {
+        name = match[1];
+        qty = match[2];
+      } else {
+        const qtyMatch = line.match(/^(.*?)\s+(\d+[.,]?\d*\s*(?:г|гр|мл|шт|кг|л|упак)[^\s]*)$/i);
+        if (qtyMatch) {
+          name = qtyMatch[1];
+          qty = qtyMatch[2];
+        }
+      }
+      name = name.trim().replace(/[;,.]+$/, "");
+      if (!name) continue;
+      result.push({ name: name.charAt(0).toUpperCase() + name.slice(1), category: guessCategory(name), qty });
+    }
+    return result.slice(0, 50);
+  }
+
+  async function onPasteSubmit(e: FormEvent<HTMLFormElement>) {
+    e.preventDefault();
+    const form = e.currentTarget;
+    const text = String(new FormData(form).get("list") ?? "");
+    const items = parsePastedList(text).map((item) => ({
+      ...item,
+      expiresAt: dateInDays(7),
+    }));
+    if (items.length === 0) return;
+    const rows = await addProductsBulk({ data: { items } });
+    setProducts((prev) => [...rows, ...prev]);
+    setPasteOpen(false);
     form.reset();
   }
 
@@ -181,6 +302,18 @@ function KitchenPage() {
         <nav className="flex items-center gap-2 text-sm">
           <Link to="/kitchen" className="min-h-11 rounded-full bg-cream px-4 py-2 text-ink">
             Кухня
+          </Link>
+          <Link
+            to="/menu"
+            className="min-h-11 rounded-full border border-cream/40 px-4 py-2 text-cream"
+          >
+            Меню
+          </Link>
+          <Link
+            to="/shopping"
+            className="min-h-11 rounded-full border border-cream/40 px-4 py-2 text-cream"
+          >
+            Покупки
           </Link>
           <Link
             to="/profile"
@@ -220,7 +353,11 @@ function KitchenPage() {
         ) : tab === "fridge" ? (
           <Fridge
             products={products}
+            todayKcal={todayKcal}
+            todayRecipe={visibleRecipes[0] ?? null}
             onOpen={() => setOpen(true)}
+            onOpenPaste={() => setPasteOpen(true)}
+            onAddPreset={onAddPreset}
             onRemove={async (id) => {
               await removeProduct({ data: { id } });
               setProducts((prev) => prev.filter((p) => p.id !== id));
@@ -229,6 +366,8 @@ function KitchenPage() {
         ) : tab === "recipes" ? (
           <RecipeList
             recipes={visibleRecipes}
+            hidden={hidden}
+            productNames={productNames}
             filters={filters}
             loading={recipesLoading}
             onFiltersChange={setFilters}
@@ -281,16 +420,33 @@ function KitchenPage() {
               Категория
               <input
                 name="category"
+                list="product-categories"
                 className="mt-2 min-h-12 w-full rounded-md border border-line bg-paper px-4"
                 placeholder="Овощи"
               />
             </label>
+            <datalist id="product-categories">
+              {["Овощи", "Фрукты", "Молочное", "Мясо", "Рыба", "Яйца", "Хлеб", "Крупы", "Бакалея"].map(
+                (c) => (
+                  <option key={c} value={c} />
+                ),
+              )}
+            </datalist>
             <label className="mt-4 block text-sm">
               Количество
               <input
                 name="qty"
                 className="mt-2 min-h-12 w-full rounded-md border border-line bg-paper px-4"
                 placeholder="3 шт"
+              />
+            </label>
+            <label className="mt-4 block text-sm">
+              Срок годности
+              <input
+                type="date"
+                name="expiresAt"
+                defaultValue={dateInDays(7)}
+                className="mt-2 min-h-12 w-full rounded-md border border-line bg-paper px-4"
               />
             </label>
             <div className="mt-6 flex gap-3">
@@ -308,19 +464,84 @@ function KitchenPage() {
           </form>
         </div>
       ) : null}
+
+      {pasteOpen ? (
+        <div className="fixed inset-0 z-30 flex items-center justify-center bg-ink/40 p-5">
+          <form
+            onSubmit={onPasteSubmit}
+            className="w-full max-w-md rounded-lg bg-cream p-6 md:p-8"
+          >
+            <h2 className="font-serif text-3xl">Вставить список</h2>
+            <p className="mt-2 text-sm text-muted">
+              Скопируйте продукты из заметок или чека — по строке на продукт.
+              Число рядом с названием станет количеством.
+            </p>
+            <textarea
+              name="list"
+              rows={8}
+              className="mt-4 w-full rounded-md border border-line bg-paper p-3 text-sm"
+              placeholder={"Молоко 1 л\nЯйца 10 шт\nКурица 500 г"}
+            />
+            <div className="mt-6 flex gap-3">
+              <button
+                type="button"
+                onClick={() => setPasteOpen(false)}
+                className="min-h-12 flex-1 rounded-full bg-paper"
+              >
+                Отмена
+              </button>
+              <button type="submit" className="min-h-12 flex-1 rounded-full bg-ink text-cream">
+                Добавить всё
+              </button>
+            </div>
+          </form>
+        </div>
+      ) : null}
     </main>
   );
 }
 
+/** Сколько дней осталось до конца срока годности (или null, если не указан). */
+function daysLeft(expiresAt: string | null): number | null {
+  if (!expiresAt) return null;
+  const [y, m, d] = expiresAt.split("-").map(Number);
+  if (!y || !m || !d) return null;
+  const expiry = new Date(y, m - 1, d);
+  const today = new Date();
+  today.setHours(0, 0, 0, 0);
+  return Math.round((expiry.getTime() - today.getTime()) / 86_400_000);
+}
+
+function freshnessBadge(days: number | null): { label: string; className: string } | null {
+  if (days === null) return null;
+  if (days < 0) return { label: "Просрочен", className: "bg-blush text-ink" };
+  if (days <= 2) return { label: "Срочно: сегодня-завтра", className: "bg-blush text-ink" };
+  if (days <= 6) return { label: "Скоро испортится", className: "bg-blush/60 text-ink" };
+  return null;
+}
+
 function Fridge({
   products,
+  todayKcal,
+  todayRecipe,
   onOpen,
+  onOpenPaste,
+  onAddPreset,
   onRemove,
 }: {
   products: ProductRow[];
+  todayKcal: number;
+  todayRecipe: RecipeRow | null;
   onOpen: () => void;
+  onOpenPaste: () => void;
+  onAddPreset: () => void;
   onRemove: (id: number) => void;
 }) {
+  const soon = products
+    .map((p) => ({ product: p, days: daysLeft(p.expiresAt) }))
+    .filter((x) => x.days !== null && x.days <= 6)
+    .sort((a, b) => (a.days ?? 0) - (b.days ?? 0));
+
   return (
     <section>
       <div className="mb-8 flex flex-wrap items-end justify-between gap-4">
@@ -328,43 +549,121 @@ function Fridge({
           <h1 className="font-display text-5xl font-light tracking-tight text-sage-deep md:text-7xl">
             ХОЛОДИЛЬНИК
           </h1>
+          <p className="mt-2 text-sm text-muted">Что есть дома и что использовать первым.</p>
         </div>
-        <button
-          type="button"
-          onClick={onOpen}
-          className="min-h-12 rounded-full bg-blush px-6 font-medium text-ink"
-        >
-          Добавить продукт
-        </button>
+        <div className="flex flex-wrap gap-2">
+          <button
+            type="button"
+            onClick={onOpen}
+            className="min-h-12 rounded-full bg-blush px-6 font-medium text-ink"
+          >
+            Добавить продукт
+          </button>
+          <button
+            type="button"
+            onClick={onAddPreset}
+            className="min-h-12 rounded-full border border-line bg-paper px-6 font-medium text-ink"
+            title="Хлеб, яйца, молоко, масло, курица"
+          >
+            Базовый набор
+          </button>
+          <button
+            type="button"
+            onClick={onOpenPaste}
+            className="min-h-12 rounded-full border border-line bg-paper px-6 font-medium text-ink"
+          >
+            Вставить список
+          </button>
+        </div>
       </div>
+
+      {/* Дашборд: свежесть, блюдо дня, КБЖУ за день */}
+      <div className="mb-8 grid gap-4 md:grid-cols-3">
+        <div className="rounded-lg bg-paper p-5">
+          <p className="text-xs tracking-wide uppercase text-muted">Скоро испортится</p>
+          {soon.length === 0 ? (
+            <p className="mt-3 text-sm text-muted">Всё свежее — есть время</p>
+          ) : (
+            <ul className="mt-3 space-y-2">
+              {soon.slice(0, 3).map(({ product, days }) => (
+                <li key={product.id} className="text-sm">
+                  <span className="font-medium">{product.name}</span>
+                  <span className="ml-2 text-muted">
+                    {days! < 0 ? "просрочен" : `${days} дн.`}
+                  </span>
+                </li>
+              ))}
+            </ul>
+          )}
+        </div>
+        <div className="rounded-lg bg-paper p-5">
+          <p className="text-xs tracking-wide uppercase text-muted">Блюдо на сегодня</p>
+          {todayRecipe ? (
+            <Link
+              to="/recipes/$recipeId"
+              params={{ recipeId: String(todayRecipe.id) }}
+              className="mt-3 block font-serif text-lg hover:underline"
+            >
+              {todayRecipe.title}
+            </Link>
+          ) : (
+            <p className="mt-3 text-sm text-muted">Добавьте продукты — подберём блюдо</p>
+          )}
+        </div>
+        <div className="rounded-lg bg-paper p-5">
+          <p className="text-xs tracking-wide uppercase text-muted">КБЖУ по меню на сегодня</p>
+          <p className="mt-3 font-display text-4xl font-light text-sage-deep">
+            {todayKcal}
+            <span className="text-lg text-muted"> ккал</span>
+          </p>
+          <Link to="/menu" className="mt-2 inline-block text-sm text-muted underline">
+            Планировщик меню →
+          </Link>
+        </div>
+      </div>
+
       {products.length === 0 ? (
         <div className="border border-dashed border-line px-6 py-16 text-center">
           <p className="font-serif text-2xl">Пока пусто</p>
-          <p className="mt-2 text-sm text-muted">Добавьте продукты — рецепты подстроятся</p>
+          <p className="mt-2 text-sm text-muted">
+            Добавьте продукты вручную, вставьте список или начните с базового набора
+          </p>
         </div>
       ) : (
         <ul className="grid gap-3">
-          {products.map((p) => (
-            <li
-              key={p.id}
-              className="flex items-center justify-between gap-4 border-b border-line py-4"
-            >
-              <div>
-                <p className="font-serif text-2xl">{p.name}</p>
-                <p className="text-sm text-muted">
-                  {p.category}
-                  {p.qty ? ` · ${p.qty}` : ""}
-                </p>
-              </div>
-              <button
-                type="button"
-                onClick={() => onRemove(p.id)}
-                className="min-h-10 text-sm text-muted underline"
+          {products.map((p) => {
+            const badge = freshnessBadge(daysLeft(p.expiresAt));
+            return (
+              <li
+                key={p.id}
+                className="flex items-center justify-between gap-4 border-b border-line py-4"
               >
-                Удалить
-              </button>
-            </li>
-          ))}
+                <div>
+                  <p className="flex flex-wrap items-center gap-2 font-serif text-2xl">
+                    {p.name}
+                    {badge ? (
+                      <span
+                        className={`rounded-full px-2 py-0.5 text-[11px] font-medium ${badge.className}`}
+                      >
+                        {badge.label}
+                      </span>
+                    ) : null}
+                  </p>
+                  <p className="text-sm text-muted">
+                    {p.category}
+                    {p.qty ? ` · ${p.qty}` : ""}
+                  </p>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => onRemove(p.id)}
+                  className="min-h-10 text-sm text-muted underline"
+                >
+                  Удалить
+                </button>
+              </li>
+            );
+          })}
         </ul>
       )}
     </section>
@@ -373,6 +672,8 @@ function Fridge({
 
 function RecipeList({
   recipes,
+  hidden,
+  productNames,
   filters,
   loading,
   onFiltersChange,
@@ -381,6 +682,8 @@ function RecipeList({
   onDelete,
 }: {
   recipes: RecipeRow[];
+  hidden: number;
+  productNames: string[];
   filters: RecipeFilters;
   loading: boolean;
   onFiltersChange: (filters: RecipeFilters) => void;
@@ -405,7 +708,15 @@ function RecipeList({
         РЕЦЕПТЫ
       </h1>
       <p className="mt-2 text-sm text-muted">
-        30 блюд в каталоге плюс ваши собственные. КБЖУ на порцию.
+        40 блюд в каталоге плюс ваши собственные. КБЖУ на порцию.
+        {hidden > 0 ? (
+          <>
+            {" "}
+            <span className="text-blush-deep">
+              {hidden} скрыто по вашим ограничениям
+            </span>
+          </>
+        ) : null}
       </p>
 
       <div className="mt-6 mb-8 grid gap-3 rounded-lg bg-paper p-4 sm:grid-cols-2 lg:grid-cols-4">
@@ -538,7 +849,21 @@ function RecipeList({
                 </div>
                 <p className="mt-1 text-sm text-muted">
                   {r.timeLabel} · {r.portions} порц.
+                  {r.cuisine ? ` · ${r.cuisine}` : ""}
                 </p>
+                {(() => {
+                  const info = matchInfo(r, productNames);
+                  if (info.hits === 0) return null;
+                  const missingText =
+                    info.total - info.hits > 0
+                      ? `не хватает: ${info.missing.slice(0, 2).join(", ")}`
+                      : "все продукты на месте";
+                  return (
+                    <p className="mt-2 text-xs font-medium text-sage-deep">
+                      {info.hits} из {info.total} продуктов дома — {missingText}
+                    </p>
+                  );
+                })()}
                 <ul className="mt-3 grid gap-1 text-sm">
                   {r.ingredients.slice(0, 5).map((ing, i) => (
                     <li key={i} className="flex justify-between gap-3 border-b border-line/60 pb-1">
