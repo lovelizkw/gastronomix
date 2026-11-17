@@ -113,19 +113,48 @@ async function createPgliteSql(): Promise<Sql> {
   globalRef.__pgliteInstance__ ??= (async () => {
     const { PGlite } = await import("@electric-sql/pglite");
     const { resolve } = await import("node:path");
-    const { mkdir } = await import("node:fs/promises");
+    const { mkdir, rename, rm } = await import("node:fs/promises");
     const dataDir = resolve(process.cwd(), ".data", "pglite");
+
     // PGlite создаёт только последний сегмент пути, поэтому родительскую
     // папку `.data` готовим заранее — иначе первый запуск падает с ENOENT.
     await mkdir(dataDir, { recursive: true });
-    const pg = new PGlite(dataDir, {
-      parsers: {
-        [OID_INT8]: Number,
-        [OID_DATE]: identity,
-        [OID_INTERVAL]: identity,
-      },
-    });
-    await pg.waitReady;
+
+    /**
+     * Открывает кластер с самовосстановлением: если предыдущий dev-сервер был
+     * завершён жёстко (убит процесс, сбой питания), восстановление WAL может
+     * аварийно оборваться, и кластер перестаёт открываться. Тогда повреждённый
+     * каталог убирается в `.data/pglite-broken-*`, а БД создаётся заново —
+     * приложение всегда стартует.
+     */
+    async function openOnce(): Promise<InstanceType<typeof PGlite>> {
+      const pg = new PGlite(dataDir, {
+        parsers: {
+          [OID_INT8]: Number,
+          [OID_DATE]: identity,
+          [OID_INTERVAL]: identity,
+        },
+      });
+      await pg.waitReady;
+      return pg;
+    }
+
+    let pg: InstanceType<typeof PGlite>;
+    try {
+      pg = await openOnce();
+    } catch (openError) {
+      const brokenDir = resolve(process.cwd(), ".data", `pglite-broken-${Date.now()}`);
+      await rm(resolve(dataDir, "postmaster.pid"), { force: true }).catch(() => {});
+      await rename(dataDir, brokenDir)
+        .catch(() => rm(dataDir, { recursive: true, force: true }));
+      await mkdir(dataDir, { recursive: true });
+      console.warn(
+        `[db] PGLite кластер не открылся (${String(openError).slice(0, 120)}); ` +
+          `повреждённые данные перенесены в ${brokenDir}, база создана заново`,
+      );
+      pg = await openOnce();
+    }
+
     // Аккуратно закрываем кластер при остановке dev-сервера (Ctrl+C), чтобы
     // PGlite успел сбросить WAL на диск. Иначе последние записи могут
     // потеряться при следующем запуске.
@@ -137,6 +166,7 @@ async function createPgliteSql(): Promise<Sql> {
     };
     process.once("SIGINT", shutdown);
     process.once("SIGTERM", shutdown);
+
     await pg.exec(
       "create table if not exists _migrations (name text primary key, applied_at timestamptz not null default now())",
     );
