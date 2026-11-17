@@ -101,6 +101,13 @@ function PreferencesPage() {
   const [cuisines, setCuisines] = useState<string[]>([]);
   const [spice, setSpice] = useState<Preferences["spice"]>("any");
   const [portionsMode, setPortionsMode] = useState<Preferences["portionsMode"]>("single");
+  // Пока React не «оживил» страницу, кнопки не работают — честно показываем
+  // это оверлеем вместо тихо теряющихся кликов (в dev-режиме прогрев долгий).
+  const [ready, setReady] = useState(false);
+
+  useEffect(() => {
+    setReady(true);
+  }, []);
 
   useEffect(() => {
     if (!user) return;
@@ -180,6 +187,16 @@ function PreferencesPage() {
       </header>
 
       <div className="mx-auto max-w-4xl px-5 pb-20">
+        {!ready ? (
+          <div className="fixed inset-0 z-40 flex items-center justify-center bg-cream/85">
+            <div className="rounded-lg bg-paper px-8 py-6 text-center shadow-sm">
+              <p className="font-serif text-2xl">Страница оживает…</p>
+              <p className="mt-2 text-sm text-muted">
+                Секунду — сейчас кнопки заработают
+              </p>
+            </div>
+          </div>
+        ) : null}
         <h1 className="pt-10 font-display text-5xl font-light tracking-tight text-sage-deep md:text-7xl">
           ВАШИ ПРЕДПОЧТЕНИЯ
         </h1>
