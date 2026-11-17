@@ -29,6 +29,7 @@ dev-сервера.
 | `name`     | text         | Название продукта                     |
 | `category` | text         | Категория (овощи, молочное и т.д.)    |
 | `qty`      | text         | Количество в свободной форме («3 шт»)|
+| `expires_at` | date / null | Срок годности (необязательно, «умная строка» подставляет +7 дней) |
 | `created_at` | timestamptz | Дата добавления                    |
 
 Индекс: `products_user_id_idx`. Все запросы фильтруются по `user_id` текущего
@@ -46,6 +47,7 @@ dev-сервера.
 | `ingredients`  | text         | Ингредиенты через запятую (для поиска по холодильнику) |
 | `ingredients_json` | jsonb    | Ингредиенты с количеством: `[{name, amount}]`     |
 | `portions`     | integer      | Число порций                                      |
+| `cuisine`      | text         | Кухня мира («русская», «итальянская»…) — для ранжирования |
 | `instructions` | text         | Способ приготовления                              |
 | `image`        | text         | Путь к фото (`/images/...`) или data-URL загруженного фото |
 | `kcal`         | integer      | Калорийность на порцию, ккал                      |
@@ -70,12 +72,46 @@ dev-сервера.
 `favorites_recipe_id_idx`. При удалении рецепта его записи избранного
 удаляются каскадом.
 
+### `user_preferences` — предпочтения пользователя
+
+Одна строка на пользователя (`user_id` — PK). Разделены на жёсткие
+ограничения и мягкие настройки:
+
+| Колонка        | Тип      | Описание                                              |
+| -------------- | -------- | ----------------------------------------------------- |
+| `allergens`    | jsonb    | Аллергены (глютен, лактоза, орехи…) — жёсткий фильтр  |
+| `diets`        | jsonb    | Диеты (веганство, кето, халяль…) — жёсткий фильтр     |
+| `stop_list`    | jsonb    | Стоп-лист продуктов по вкусу — жёсткий фильтр         |
+| `goal`         | text     | Цель: none / lose / gain / gi                         |
+| `macro`        | text     | Баланс БЖУ: balance / protein / lowfat / lowcarb      |
+| `daily_kcal`   | integer / null | Суточная норма калорий                          |
+| `max_minutes`  | integer / null | Максимум времени на блюдо                       |
+| `skill`        | text     | novice / chef                                         |
+| `equipment`    | jsonb    | Доступная техника (духовка, блендер…)                 |
+| `cuisines`     | jsonb    | Любимые кухни мира                                    |
+| `spice`        | text     | any / mild / hot                                      |
+| `portions_mode`| text     | single / family                                       |
+
+### `menu_plan` — планировщик меню
+
+| Колонка     | Тип        | Описание                                     |
+| ----------- | ---------- | -------------------------------------------- |
+| `user_id`   | text       | Владелец плана                               |
+| `day`       | date       | Дата (7 дней недели)                         |
+| `meal`      | text       | breakfast / lunch / dinner / snack           |
+| `recipe_id` | integer FK | Рецепт (`recipes.id`, `on delete cascade`)   |
+
+Первичный ключ — (`user_id`, `day`, `meal`): одна ячейка = одно блюдо.
+
 ### Наполнение каталога
 
 - `0003_seed_recipes.sql` — первые 18 рецептов;
-- `0004_seed_recipes_catalog.sql` — ещё 12 рецептов, итого **30 блюд в каталоге**;
+- `0004_seed_recipes_catalog.sql` — ещё 12 рецептов;
 - `0006_recipe_images.sql` — подходящее отдельное фото каждому блюду каталога;
-- `0007_favorites_minutes.sql` — таблица `favorites` и числовое `minutes`.
+- `0007_favorites_minutes.sql` — таблица `favorites` и числовое `minutes`;
+- `0008_user_features.sql` — `user_preferences`, `expires_at`, `menu_plan`;
+- `0009_recipes_expanded.sql` — 10 новых блюд (итого 40), кухня,
+  граммовки и пошаговые инструкции у всех рецептов.
 
 Все миграции идемпотентны: повторно каталог не дублируется.
 
@@ -84,7 +120,9 @@ dev-сервера.
 ```
 user 1 ──── * session
 user 1 ──── * account
-user 1 ──── * products   (user_id)
-user 1 ──── * recipes    (user_id, nullable — каталог)
-user * ──── * recipes    (favorites: user_id + recipe_id)
+user 1 ──── * products         (user_id)
+user 1 ──── * recipes          (user_id, nullable — каталог)
+user * ──── * recipes          (favorites: user_id + recipe_id)
+user 1 ──── 1 user_preferences (user_id)
+user 1 ──── * menu_plan        (user_id + day + meal → recipe)
 ```
