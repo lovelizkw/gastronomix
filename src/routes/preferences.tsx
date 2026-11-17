@@ -26,11 +26,13 @@ function Chip({ label, active, onClick }: ChipProps) {
       type="button"
       onClick={onClick}
       aria-pressed={active}
-      className={`min-h-10 rounded-full px-4 text-sm ${
-        active ? "bg-ink text-cream" : "border border-line bg-paper text-ink"
+      className={`min-h-10 rounded-full px-4 text-sm font-medium transition-colors ${
+        active
+          ? "bg-sage-deep text-cream"
+          : "border border-line bg-paper text-ink hover:border-ink/30"
       }`}
     >
-      {label}
+      {active ? `✓ ${label}` : label}
     </button>
   );
 }
