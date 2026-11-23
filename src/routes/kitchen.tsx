@@ -911,7 +911,7 @@ function RecipeList({
       </div>
 
       {/* Чипсы категорий + круглая «тарелка» выбранного блюда (референс 3) */}
-      <div className="mb-8 grid gap-8 lg:grid-cols-[1fr_300px]">
+      <div className="mb-8 grid gap-8 2xl:grid-cols-[1fr_300px]">
         <div>
           <div className="flex flex-wrap gap-2">
             <button
@@ -950,7 +950,7 @@ function RecipeList({
               </p>
             </div>
           ) : (
-            <div className="mt-6 grid gap-6 sm:grid-cols-2">
+            <div className="mt-6 grid gap-5 sm:grid-cols-2 md:grid-cols-3 xl:grid-cols-4">
               {byCuisine.map((r) => (
             <article
               key={r.id}
@@ -965,14 +965,14 @@ function RecipeList({
                 params={{ recipeId: String(r.id) }}
                 className="block"
               >
-                <img src={r.image} alt={r.title} className="h-48 w-full object-cover" />
+                <img src={r.image} alt={r.title} className="h-40 w-full object-cover" />
               </Link>
-              <div className="p-5">
-                <div className="flex items-start justify-between gap-3">
+              <div className="p-4">
+                <div className="flex items-start justify-between gap-2">
                   <Link
                     to="/recipes/$recipeId"
                     params={{ recipeId: String(r.id) }}
-                    className="font-serif text-2xl hover:underline"
+                    className="font-serif text-xl leading-snug hover:underline"
                   >
                     {r.title}
                   </Link>
@@ -1012,7 +1012,7 @@ function RecipeList({
                     )}
                   </div>
                 </div>
-                <p className="mt-1 text-sm text-muted">
+                <p className="mt-1 text-xs text-muted">
                   {r.timeLabel} · {r.portions} порц.
                   {r.cuisine ? ` · ${r.cuisine}` : ""}
                 </p>
@@ -1029,19 +1029,19 @@ function RecipeList({
                     </p>
                   );
                 })()}
-                <ul className="mt-3 grid gap-1 text-sm">
-                  {r.ingredients.slice(0, 5).map((ing, i) => (
-                    <li key={i} className="flex justify-between gap-3 border-b border-line/60 pb-1">
+                <ul className="mt-2 grid gap-1 text-xs">
+                  {r.ingredients.slice(0, 4).map((ing, i) => (
+                    <li key={i} className="flex justify-between gap-2 border-b border-line/60 pb-1">
                       <span>{ing.name}</span>
                       {ing.amount ? <span className="text-muted">{ing.amount}</span> : null}
                     </li>
                   ))}
                 </ul>
-                <p className="mt-4 flex flex-wrap gap-2 text-xs font-medium">
-                  <span className="rounded-full bg-sage px-3 py-1">{r.kbju.k} ккал</span>
-                  <span className="rounded-full bg-sage/50 px-3 py-1">Б {r.kbju.b}г</span>
-                  <span className="rounded-full bg-sage/50 px-3 py-1">Ж {r.kbju.j}г</span>
-                  <span className="rounded-full bg-sage/50 px-3 py-1">У {r.kbju.u}г</span>
+                <p className="mt-3 flex flex-wrap gap-1.5 text-[11px] font-medium">
+                  <span className="rounded-full bg-sage px-2.5 py-1">{r.kbju.k} ккал</span>
+                  <span className="rounded-full bg-sage/50 px-2.5 py-1">Б {r.kbju.b}г</span>
+                  <span className="rounded-full bg-sage/50 px-2.5 py-1">Ж {r.kbju.j}г</span>
+                  <span className="rounded-full bg-sage/50 px-2.5 py-1">У {r.kbju.u}г</span>
                 </p>
               </div>
             </article>
@@ -1051,7 +1051,7 @@ function RecipeList({
 
           {/* Круглая «тарелка» выбранного блюда */}
           {hero ? (
-            <aside className="sticky top-6 hidden rounded-lg bg-paper p-6 text-center lg:block">
+            <aside className="sticky top-6 hidden rounded-lg bg-paper p-6 text-center 2xl:block">
               <img
                 src={hero.image}
                 alt={hero.title}
