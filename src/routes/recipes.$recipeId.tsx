@@ -451,7 +451,7 @@ function ChefMode({ recipe, onClose }: { recipe: RecipeRow; onClose: () => void 
                         onClick={() => setTimer({ label: d.label, seconds: d.seconds })}
                         className="min-h-10 rounded-full bg-sage-deep px-4 text-sm font-medium text-cream"
                       >
-                        ⏱ {d.label}
+                        Таймер {d.label}
                       </button>
                     ))}
                   </div>
@@ -469,7 +469,7 @@ function ChefMode({ recipe, onClose }: { recipe: RecipeRow; onClose: () => void 
       {timer ? (
         <div className="fixed bottom-6 right-6 z-50 rounded-full bg-blush px-6 py-4 text-ink shadow-lg">
           <p className="text-sm font-medium">
-            ⏱ {timer.label} — {formatTime(timer.seconds)}
+            {timer.label} — {formatTime(timer.seconds)}
           </p>
           <button
             type="button"

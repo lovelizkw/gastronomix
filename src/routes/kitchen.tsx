@@ -329,7 +329,7 @@ function KitchenPage() {
             className="min-h-11 rounded-full border border-blush/60 bg-blush/20 px-4 py-2 text-cream"
             title="Расширить каталог с помощью ИИ"
           >
-            ✨ ИИ-каталог
+            ИИ-каталог
           </Link>
           <Link
             to="/profile"
@@ -691,69 +691,62 @@ function Fridge({
       </div>
 
       {products.length === 0 ? (
-        <div className="border border-dashed border-line px-6 py-16 text-center">
+        <div className="rounded-lg bg-paper px-6 py-16 text-center shadow-sm">
           <p className="font-serif text-2xl">Пока пусто</p>
           <p className="mt-2 text-sm text-muted">
             Добавьте продукты вручную, вставьте список или начните с базового набора
           </p>
         </div>
       ) : (
-        <div className="grid gap-6 sm:grid-cols-2 lg:grid-cols-3">
-          {products.map((p, i) => {
+        <div className="grid gap-5 sm:grid-cols-2 lg:grid-cols-3">
+          {products.map((p) => {
             const badge = freshnessBadge(daysLeft(p.expiresAt));
             const color = freshnessColor(p);
             const left = shelfLifeLeft(p);
             return (
-              <article key={p.id} className="gx-card-hover relative rounded-lg bg-paper pb-4">
-                {/* Цветная «плашка» категории, продукт «лежит» сверху */}
-                <div className={`h-28 rounded-t-lg ${plateColor(p.category)}`}>
-                  <span className="absolute -top-4 left-5 flex size-9 items-center justify-center rounded-full bg-ink text-sm font-semibold text-cream">
-                    {i + 1}
-                  </span>
-                  <span className="absolute -top-6 right-6 flex size-14 items-center justify-center rounded-full bg-cream font-serif text-xl text-ink shadow-md">
-                    {p.name.slice(0, 2).toUpperCase()}
-                  </span>
-                  {p.expiresAt ? (
-                    <span className="absolute right-4 top-4 rounded-full bg-cream/90 px-2 py-0.5 text-[10px] text-muted">
-                      {p.expiresAt.slice(5)}
+              <article key={p.id} className="gx-card-hover rounded-xl bg-paper p-5 shadow-sm">
+                <div className="flex items-center justify-between gap-3">
+                  <div className="flex items-center gap-3">
+                    <span className={`flex size-11 items-center justify-center rounded-xl text-lg ${plateTint(p.category)}`}>
+                      {categoryIcon(p.category)}
                     </span>
-                  ) : null}
-                </div>
-                <div className="px-5 pt-3">
-                  <p className="flex flex-wrap items-center gap-2 font-serif text-xl">
-                    {p.name}
-                    {badge ? (
-                      <span
-                        className={`rounded-full px-2 py-0.5 text-[10px] font-medium ${badge.className}`}
-                      >
-                        {badge.label}
-                      </span>
-                    ) : null}
-                  </p>
-                  <p className="text-xs text-muted">
-                    {p.category}
-                    {p.qty ? ` · ${p.qty}` : ""}
-                  </p>
-                  {/* Светофор свежести: зелёный → жёлтый → красный */}
-                  {color && left !== null ? (
-                    <div className="mt-2">
-                      <div className="h-1.5 w-full overflow-hidden rounded-full bg-line">
-                        <div
-                          className={`h-full rounded-full transition-all ${color.bar}`}
-                          style={{ width: `${Math.max(3, Math.round(left * 100))}%` }}
-                        />
-                      </div>
-                      <p className="mt-1 text-[11px] text-muted">{color.label}</p>
+                    <div>
+                      <p className="font-serif text-xl">{p.name}</p>
+                      <p className="text-xs text-muted">
+                        {p.category}
+                        {p.qty ? ` · ${p.qty}` : ""}
+                      </p>
                     </div>
+                  </div>
+                  {p.expiresAt ? (
+                    <span className="text-[10px] text-muted">{p.expiresAt.slice(5)}</span>
                   ) : null}
-                  <button
-                    type="button"
-                    onClick={() => onRemove(p.id)}
-                    className="mt-3 min-h-8 text-xs text-muted underline"
-                  >
-                    Удалить
-                  </button>
                 </div>
+                {badge ? (
+                  <span
+                    className={`mt-3 inline-block rounded-full px-2 py-0.5 text-[10px] font-medium ${badge.className}`}
+                  >
+                    {badge.label}
+                  </span>
+                ) : null}
+                {/* Светофор свежести: зелёный → жёлтый → красный */}
+                {color && left !== null ? (
+                  <div className="mt-2">
+                    <div className="h-1.5 w-full overflow-hidden rounded-full bg-line">
+                      <div
+                        className={`h-full rounded-full transition-all ${color.bar}`}
+                        style={{ width: `${Math.max(3, Math.round(left * 100))}%` }}
+                      />
+                    </div>
+                  </div>
+                ) : null}
+                <button
+                  type="button"
+                  onClick={() => onRemove(p.id)}
+                  className="mt-3 min-h-8 text-xs text-muted underline"
+                >
+                  Удалить
+                </button>
               </article>
             );
           })}
@@ -763,8 +756,24 @@ function Fridge({
   );
 }
 
-/** Цвет плашки карточки продукта по категории (референс 4). */
-function plateColor(category: string): string {
+/** Значок-иконка категории (текстовый символ, без эмодзи). */
+function categoryIcon(category: string): string {
+  const map: Record<string, string> = {
+    "Молочное": "●",
+    "Мясо": "▲",
+    "Рыба": "◆",
+    "Овощи": "❋",
+    "Фрукты": "❍",
+    "Хлеб": "▬",
+    "Яйца": "◯",
+    "Крупы": "⬡",
+    "Бакалея": "◇",
+  };
+  return map[category] ?? "•";
+}
+
+/** Мягкая подложка иконки по категории. */
+function plateTint(category: string): string {
   const map: Record<string, string> = {
     "Молочное": "bg-lilac/40",
     "Мясо": "bg-blush/50",
@@ -1231,7 +1240,7 @@ function RecipeForm({
           </div>
           {importError ? <p className="mt-2 text-xs text-red-700">{importError}</p> : null}
           {importNote ? (
-            <p className="mt-2 rounded-md bg-lilac/30 p-2 text-xs text-ink">✨ {importNote}</p>
+            <p className="mt-2 rounded-md bg-lilac/30 p-2 text-xs text-ink">{importNote}</p>
           ) : null}
         </form>
       ) : null}

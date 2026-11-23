@@ -30,9 +30,9 @@ export const importRecipeWithLlm = createServerFn({ method: "POST" })
   .middleware([authMiddleware])
   .validator(z.object({ url: z.string().trim().url().max(500) }))
   .handler(async ({ data }) => {
-    if (!llmEnabled()) {
+  if (!llmEnabled()) {
       throw new Error(
-        "LLM не подключён: добавьте DEEPSEEK_API_KEY в файл .env проекта",
+        "Шеф-ИИ не подключён: задайте YC_API_KEY и YC_FOLDER_ID в файле .env проекта",
       );
     }
     const pageText = await fetchPageText(data.url);
@@ -76,7 +76,7 @@ export const assistantChat = createServerFn({ method: "POST" })
   .handler(async ({ context, data }) => {
     if (!llmEnabled()) {
       throw new Error(
-        "LLM не подключён: добавьте DEEPSEEK_API_KEY в файл .env проекта",
+        "Шеф-ИИ не подключён: задайте YC_API_KEY и YC_FOLDER_ID в файле .env проекта",
       );
     }
     const sql = await getSql();
@@ -136,7 +136,7 @@ export const generateRecipes = createServerFn({ method: "POST" })
   .handler(async ({ data }) => {
     if (!llmEnabled()) {
       throw new Error(
-        "LLM не подключён: добавьте DEEPSEEK_API_KEY в файл .env проекта",
+        "Шеф-ИИ не подключён: задайте YC_API_KEY и YC_FOLDER_ID в файле .env проекта",
       );
     }
     const parsed = await llmJson<{ recipes: unknown[] }>(

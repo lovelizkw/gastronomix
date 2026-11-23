@@ -50,13 +50,13 @@ export function ChefChat() {
         onClick={() => setOpen((v) => !v)}
         className="fixed bottom-5 right-5 z-30 min-h-12 rounded-full bg-ink px-5 text-sm font-medium text-cream shadow-lg"
       >
-        {open ? "Закрыть чат" : "✨ Спросить шефа"}
+        {open ? "Закрыть чат" : "Спросить шефа"}
       </button>
 
       {open ? (
         <div className="fixed bottom-20 right-5 z-30 flex max-h-[70vh] w-[min(92vw,360px)] flex-col rounded-lg bg-cream shadow-xl">
           <div className="rounded-t-lg bg-ink px-4 py-3 text-cream">
-            <p className="font-serif text-lg">Шеф-ИИ ✨</p>
+            <p className="font-serif text-lg">Шеф-ИИ</p>
             <p className="text-xs text-cream/70">знает ваш холодильник и каталог</p>
           </div>
           <div ref={listRef} className="flex-1 space-y-3 overflow-y-auto p-4">

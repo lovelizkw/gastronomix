@@ -87,7 +87,7 @@ function GrowPage() {
       </header>
 
       <div className="mx-auto max-w-3xl px-5 py-10">
-        <p className="text-xs uppercase tracking-[0.3em] text-sage-deep">✨ Шеф-ИИ</p>
+        <p className="text-xs uppercase tracking-[0.3em] text-sage-deep">Шеф-ИИ</p>
         <h1 className="mt-2 font-display text-5xl font-light tracking-tight text-sage-deep md:text-7xl">
           РАСШИРИТЬ КАТАЛОГ
         </h1>
@@ -134,23 +134,29 @@ function GrowPage() {
         {llmReady === false ? (
           <div className="mt-8 rounded-lg bg-lilac/30 p-6">
             <p className="font-serif text-2xl">Шеф-ИИ пока не подключён</p>
-            <p className="mt-2 text-sm text-muted">Три шага, чтобы включить:</p>
+            <p className="mt-2 text-sm text-muted">Четыре шага, чтобы включить YandexGPT:</p>
             <ol className="mt-4 list-decimal space-y-2 pl-5 text-sm text-muted">
               <li>
-                Зарегистрируйтесь на <span className="font-medium">platform.deepseek.com</span> и
-                создайте API-ключ (раздел API keys, формат sk-…).
+                Зайдите в <span className="font-medium">Yandex Cloud</span> (консоль{" "}
+                <span className="font-medium">console.cloud.yandex.ru</span>) — там есть
+                бесплатный стартовый грант для новых пользователей.
               </li>
               <li>
-                Откройте файл <span className="rounded bg-paper px-1 font-mono text-xs">.env</span>{" "}
-                в папке проекта и впишите в него:
+                Откройте сервис <span className="font-medium">AI Studio</span> и создайте
+                API-ключ (раздел «API-ключи»), а также скопируйте ID каталога (folder) из
+                консоли облака.
+              </li>
+              <li>
+                Откройте файл{" "}
+                <span className="rounded bg-paper px-1 font-mono text-xs">.env</span> в папке
+                проекта и впишите обе строки:
                 <span className="mt-1 block rounded bg-paper px-2 py-1 font-mono text-xs text-ink">
-                  DEEPSEEK_API_KEY=sk-ваш-ключ
+                  YC_API_KEY=ваш-ключ
+                  <br />
+                  YC_FOLDER_ID=id-каталога
                 </span>
               </li>
               <li>Сохраните файл и перезапустите сервер (Ctrl + C, затем npm run dev).</li>
-              <li>
-                Пополните баланс DeepSeek (минимально ~1 $): это единственный платный шаг.
-              </li>
             </ol>
           </div>
         ) : null}
