@@ -6,6 +6,11 @@ import { fetchPageText, llmEnabled, llmComplete, llmJson } from "@/lib/llm";
 
 /* ============================ Чтение ссылок LLM ======================== */
 
+/** Публичный статус подключения ИИ — для подсказок в интерфейсе. */
+export const llmStatus = createServerFn({ method: "GET" }).handler(async () => {
+  return { enabled: llmEnabled() };
+});
+
 const ParsedRecipe = z.object({
   title: z.string().trim().min(2).max(80),
   ingredients: z

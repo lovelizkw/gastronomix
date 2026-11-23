@@ -1,9 +1,10 @@
 import { createFileRoute, Link } from "@tanstack/react-router";
-import { FormEvent, useState } from "react";
+import { FormEvent, useEffect, useState } from "react";
 import { RedirectToSignIn } from "@/lib/auth/gates";
 import { useCurrentUserState } from "@/lib/auth/use-current-user";
 import {
   generateRecipes,
+  llmStatus,
   saveGeneratedRecipes,
   type GeneratedRecipe,
 } from "@/lib/llm-api";
@@ -19,6 +20,19 @@ function GrowPage() {
   const [recipes, setRecipes] = useState<GeneratedRecipe[]>([]);
   const [chosen, setChosen] = useState<Set<number>>(new Set());
   const [created, setCreated] = useState<string[]>([]);
+  const [llmReady, setLlmReady] = useState<boolean | null>(null);
+
+  useEffect(() => {
+    let cancelled = false;
+    llmStatus()
+      .then((status) => {
+        if (!cancelled) setLlmReady(status.enabled);
+      })
+      .catch(() => null);
+    return () => {
+      cancelled = true;
+    };
+  }, []);
 
   if (isPending) return <main className="min-h-svh bg-cream" />;
   if (!user) return <RedirectToSignIn />;
@@ -116,6 +130,27 @@ function GrowPage() {
         </div>
 
         {error ? <p className="mt-6 text-sm text-red-700">{error}</p> : null}
+
+        {llmReady === false ? (
+          <div className="mt-8 rounded-lg bg-lilac/30 p-6">
+            <p className="font-serif text-2xl">Шеф-ИИ пока не подключён</p>
+            <p className="mt-2 text-sm text-muted">Три шага, чтобы включить:</p>
+            <ol className="mt-4 list-decimal space-y-2 pl-5 text-sm text-muted">
+              <li>
+                Зарегистрируйтесь на <span className="font-medium">platform.deepseek.com</span> и
+                создайте API-ключ (раздел API keys, формат sk-…).
+              </li>
+              <li>
+                Откройте файл <span className="rounded bg-paper px-1 font-mono text-xs">.env</span>{" "}
+                в папке проекта и впишите в него:
+                <span className="mt-1 block rounded bg-paper px-2 py-1 font-mono text-xs text-ink">
+                  DEEPSEEK_API_KEY=sk-ваш-ключ
+                </span>
+              </li>
+              <li>Сохраните файл и перезапустите сервер (Ctrl + C, затем npm run dev).</li>
+            </ol>
+          </div>
+        ) : null}
 
         {created.length > 0 ? (
           <div className="mt-8 rounded-lg bg-sage/40 p-6">

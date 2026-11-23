@@ -212,26 +212,26 @@ function Hero() {
         src="/images/recipes/tomato-soup.jpg"
         alt=""
         aria-hidden
-        className="gx-float pointer-events-none absolute -left-8 top-24 hidden size-36 rounded-full object-cover shadow-xl lg:block xl:left-10 xl:size-44"
+        className="gx-float pointer-events-none absolute -left-6 top-24 hidden size-28 rounded-full object-cover shadow-xl md:block xl:-left-2 xl:size-44"
       />
       <img
         src="/images/recipes/caesar-salad.jpg"
         alt=""
         aria-hidden
-        className="gx-float-slow pointer-events-none absolute right-[8%] top-40 hidden size-28 rounded-full object-cover shadow-lg lg:block xl:size-32"
+        className="gx-float-slow pointer-events-none absolute right-[4%] top-32 hidden size-24 rounded-full object-cover shadow-lg md:block xl:right-[8%] xl:size-32"
       />
       <img
         src="/images/recipes/creme-brulee.jpg"
         alt=""
         aria-hidden
-        className="gx-float pointer-events-none absolute bottom-24 left-[18%] hidden size-24 rounded-full object-cover shadow-lg xl:block"
+        className="gx-float pointer-events-none absolute bottom-24 left-[14%] hidden size-20 rounded-full object-cover shadow-lg md:block xl:left-[18%] xl:size-24"
         style={{ animationDelay: "1.5s" }}
       />
       <img
         src="/images/recipes/shakshuka.jpg"
         alt=""
         aria-hidden
-        className="gx-float-slow pointer-events-none absolute bottom-32 right-[16%] hidden size-20 rounded-full object-cover shadow-lg lg:block"
+        className="gx-float-slow pointer-events-none absolute bottom-40 right-[12%] hidden size-16 rounded-full object-cover shadow-lg md:block xl:right-[16%] xl:size-20"
         style={{ animationDelay: "2.2s" }}
       />
 
