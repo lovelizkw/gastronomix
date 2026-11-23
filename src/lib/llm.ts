@@ -3,6 +3,7 @@
  * Ключ читается из переменной окружения DEEPSEEK_API_KEY.
  * Если ключ не задан, функции LLM честно сообщают об этом.
  */
+import "./load-env.server";
 
 const API_URL = "https://api.deepseek.com/chat/completions";
 const MODEL = "deepseek-chat";
@@ -37,6 +38,13 @@ export async function llmComplete(
   });
   if (!res.ok) {
     const text = await res.text().catch(() => "");
+    if (res.status === 402) {
+      throw new Error(
+        "Аккаунт DeepSeek подключён, но на балансе нет средств — пополните его " +
+          "на platform.deepseek.com (хватило бы минимального пополнения) или дайте мне знать, " +
+          "и я переключу проект на другого провайдера",
+      );
+    }
     throw new Error(`LLM ответил ошибкой ${res.status}: ${text.slice(0, 160)}`);
   }
   const json = (await res.json()) as {
