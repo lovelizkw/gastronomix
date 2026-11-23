@@ -1,174 +1,272 @@
 import { createFileRoute, Link } from "@tanstack/react-router";
+import { useState } from "react";
 import { SiteNav } from "@/components/site-nav";
 
 export const Route = createFileRoute("/")({ component: Home });
+
+/** Публичный фрагмент каталога для витрины на главной (без авторизации). */
+const SHOWCASE = [
+  { title: "Паста карбонара", image: "/images/recipes/carbonara.jpg", kcal: 430, minutes: 25 },
+  { title: "Салат «Цезарь»", image: "/images/recipes/caesar-salad.jpg", kcal: 320, minutes: 20 },
+  { title: "Шакшука", image: "/images/recipes/shakshuka.jpg", kcal: 260, minutes: 20 },
+  { title: "Крем-брюле", image: "/images/recipes/creme-brulee.jpg", kcal: 380, minutes: 60 },
+  { title: "Гаспачо", image: "/images/recipes/gazpacho.jpg", kcal: 120, minutes: 15 },
+  { title: "Кесадилья с курицей", image: "/images/recipes/quesadilla.jpg", kcal: 380, minutes: 20 },
+  { title: "Тыквенный крем-суп", image: "/images/recipes/pumpkin-soup.jpg", kcal: 150, minutes: 40 },
+  { title: "Паста с сыром", image: "/images/recipes/pasta-cheese.jpg", kcal: 380, minutes: 20 },
+];
 
 function Home() {
   return (
     <main className="bg-cream text-ink">
       <Hero />
-      <What />
-      <History />
-      <How />
+      <Features />
+      <Showcase />
+      <Steps />
       <Invite />
     </main>
   );
 }
 
-function Hero() {
+/** Витрина: горизонтальная карусель блюд со стрелками и точками (референс 2). */
+function Showcase() {
+  const [index, setIndex] = useState(0);
+  const visible = 5;
+  const max = SHOWCASE.length - visible;
+  const offset = Math.min(index, max);
+
   return (
-    <section className="relative overflow-hidden bg-sage">
-      <SiteNav />
-      <div className="relative grid min-h-[100svh] grid-cols-1 md:grid-cols-2">
-        <div className="relative flex flex-col justify-end px-5 pb-28 pt-24 md:px-10 md:pb-32">
-          <span className="mb-6 inline-flex size-10 items-center justify-center rounded-full bg-lilac text-[10px] font-semibold tracking-widest text-ink">
-            GX
-          </span>
-          <p className="max-w-xs font-serif text-lead leading-tight text-ink">
-            Учёт продуктов
-            <br />
-            и феномен
-            <br />
-            умного рациона
-          </p>
-        </div>
-        <div className="relative min-h-[42vh] md:min-h-full">
-          <img
-            src="/images/hero-tomatoes.jpg"
-            alt="Свежие томаты"
-            className="absolute inset-0 size-full object-cover"
-          />
-        </div>
+    <section className="relative overflow-hidden bg-sage-deep/10 px-5 py-20 md:px-12 md:py-28">
+      <div className="mx-auto max-w-6xl text-center">
+        <h2 className="font-display text-section font-light leading-[0.9] tracking-tight text-sage-deep">
+          ЧТО ГОТОВИМ
+          <br />
+          В ЭТОЙ НЕДЕЛЕ
+        </h2>
+        <p className="mx-auto mt-4 max-w-md text-sm leading-relaxed text-muted">
+          Каталог из 55 блюд с КБЖУ и пошаговыми инструкциями. Внутри — фильтры
+          по калориям и времени, избранное и режим шеф-повара.
+        </p>
       </div>
 
-      <h1 className="pointer-events-none absolute left-0 right-0 top-[10%] z-[1] px-3 font-display text-display font-light leading-[0.78] tracking-tight text-cream md:top-[8%] md:px-5">
-        GASTRO
-        <br />
-        NOMIX
-      </h1>
-
-      <img
-        src="/images/whisk-bowl.jpg"
-        alt=""
-        className="pointer-events-none absolute right-[42%] top-[8%] z-[2] hidden size-32 rounded-full object-cover shadow-lg md:block lg:size-40"
-      />
-
-      <Link
-        to="/register"
-        className="absolute bottom-10 left-1/2 z-20 flex size-28 -translate-x-1/2 items-center justify-center rounded-full bg-blush font-serif text-lg text-ink shadow-sm transition-transform duration-200 hover:scale-105 md:bottom-16 md:left-[46%] md:size-32"
-      >
-        Узнать
-      </Link>
+      <div className="relative mx-auto mt-12 max-w-6xl">
+        <button
+          type="button"
+          onClick={() => setIndex((i) => Math.max(0, i - 1))}
+          disabled={offset === 0}
+          aria-label="Назад"
+          className="absolute left-0 top-1/2 z-10 flex size-11 -translate-y-1/2 items-center justify-center rounded-full bg-cream text-xl shadow-md disabled:opacity-30"
+        >
+          ‹
+        </button>
+        <div className="overflow-hidden px-12">
+          <div
+            className="flex gap-5 transition-transform duration-500 ease-out"
+            style={{ transform: `translateX(calc(-${offset} * (20% + 1rem)))` }}
+          >
+            {SHOWCASE.map((item, i) => (
+              <article
+                key={item.title}
+                className="gx-card-hover w-[62vw] shrink-0 sm:w-[38vw] md:w-[19%]"
+              >
+                <img
+                  src={item.image}
+                  alt={item.title}
+                  className={`aspect-[3/4] w-full rounded-lg object-cover shadow-md ${
+                    i === offset + 2 ? "md:-translate-y-3 md:shadow-xl" : ""
+                  }`}
+                />
+                <p className="mt-3 text-center font-serif text-lg">{item.title}</p>
+                <p className="text-center text-xs text-muted">
+                  {item.kcal} ккал · {item.minutes} мин
+                </p>
+              </article>
+            ))}
+          </div>
+        </div>
+        <button
+          type="button"
+          onClick={() => setIndex((i) => Math.min(max, i + 1))}
+          disabled={offset >= max}
+          aria-label="Вперёд"
+          className="absolute right-0 top-1/2 z-10 flex size-11 -translate-y-1/2 items-center justify-center rounded-full bg-cream text-xl shadow-md disabled:opacity-30"
+        >
+          ›
+        </button>
+        <div className="mt-6 flex justify-center gap-2">
+          {Array.from({ length: max + 1 }).map((_, i) => (
+            <button
+              key={i}
+              type="button"
+              onClick={() => setIndex(i)}
+              aria-label={`Слайд ${i + 1}`}
+              className={`size-2 rounded-full ${i === offset ? "bg-sage-deep" : "bg-line"}`}
+            />
+          ))}
+        </div>
+      </div>
     </section>
   );
 }
 
-function What() {
+/** Секция «Что это такое» — светлые карточки с плюсом (референс 5). */
+function Features() {
+  const cards = [
+    { t: "Цифровой холодильник", d: "Пишете, что есть дома — продукты с количеством и сроком годности.", icon: "+", img: "/images/recipes/tomato-soup.jpg" },
+    { t: "Умный подбор", d: "Система показывает блюда из имеющихся продуктов и считает совпадения.", icon: "◯", img: "/images/recipes/caesar-salad.jpg" },
+    { t: "Понятное КБЖУ", d: "Калории, белки, жиры и углеводы на каждом рецепте и в меню на неделю.", icon: "✕", img: "/images/recipes/borscht.jpg" },
+  ];
+
   return (
-    <section className="relative overflow-hidden bg-cream px-5 py-20 md:px-12 md:py-28">
-      <div className="mx-auto grid max-w-6xl gap-12 md:grid-cols-[1.1fr_0.9fr] md:items-start">
+    <section className="bg-cream px-5 py-20 md:px-12 md:py-28">
+      <div className="mx-auto max-w-6xl">
+        <div className="grid gap-10 md:grid-cols-[1fr_1fr] md:items-center">
+          <h2 className="font-display text-section font-light leading-[0.85] tracking-tight text-sage-deep">
+            КУХНЯ,
+            <br />
+            КОТОРАЯ
+            <br />
+            СЧИТАЕТ
+          </h2>
+          <div className="space-y-6">
+            <p className="max-w-md text-sm leading-relaxed text-muted">
+              Gastronomix — цифровой холодильник с умным подбором рецептов:
+              он знает, что лежит на полке, и предлагает блюда, которые можно
+              приготовить прямо сейчас.
+            </p>
+            <p className="max-w-md text-sm leading-relaxed text-muted">
+              А шеф-ИИ подскажет, чем заменить сметану и что приготовить
+              из трёх продуктов и пучка зелени.
+            </p>
+          </div>
+        </div>
+
+        <div className="mt-14 grid gap-6 md:grid-cols-3">
+          {cards.map((card, i) => (
+            <article
+              key={card.t}
+              className={`gx-card-hover relative rounded-lg bg-paper p-6 pt-10 ${i === 0 ? "gx-rise" : i === 1 ? "gx-rise-2" : "gx-rise-3"}`}
+            >
+              <span className="absolute -top-4 left-6 flex size-9 items-center justify-center rounded-full bg-ink text-lg text-cream">
+                {card.icon}
+              </span>
+              <img
+                src={card.img}
+                alt=""
+                className="absolute -top-6 right-6 size-16 gx-float rounded-full object-cover shadow-md"
+              />
+              <h3 className="font-serif text-2xl">{card.t}</h3>
+              <p className="mt-3 text-sm leading-relaxed text-muted">{card.d}</p>
+            </article>
+          ))}
+        </div>
+      </div>
+    </section>
+  );
+}
+
+/** Как это работает — 4 шага с иллюстрацией. */
+function Steps() {
+  const steps = [
+    { n: "01", t: "Регистрация", d: "Имя, почта, пароль — и личный кабинет готов." },
+    { n: "02", t: "Холодильник", d: "Добавляете продукты: молоко, томаты, яйца." },
+    { n: "03", t: "Рецепты", d: "Система показывает блюда из того, что уже есть." },
+    { n: "04", t: "КБЖУ", d: "Калории, белки, жиры, углеводы — на карточке рецепта." },
+  ];
+
+  return (
+    <section className="bg-cream px-5 py-20 md:px-12 md:py-28">
+      <div className="mx-auto max-w-6xl">
         <h2 className="font-display text-section font-light leading-[0.85] tracking-tight text-sage-deep">
-          ЧТО
+          КАК
           <br />
           ЭТО
           <br />
-          ТАКОЕ?
+          РАБОТАЕТ
         </h2>
-        <div className="space-y-8 pt-2">
-          <p className="max-w-sm text-sm leading-relaxed text-muted">
-            Цифровой холодильник. Вы записываете, что есть дома — система
-            предлагает блюда из этих продуктов и считает КБЖУ.
-          </p>
-          <p className="max-w-sm text-sm leading-relaxed text-muted">
-            Ничего сложного: честный подбор по ингредиентам,
-            понятный интерфейс и аккуратный журнал о еде.
-          </p>
+        <div className="mt-14 grid gap-10 md:grid-cols-2">
+          {steps.map((s) => (
+            <article key={s.n} className="border-t border-line pt-5">
+              <p className="font-display text-sm tracking-[0.2em] text-sage-deep">{s.n}</p>
+              <h3 className="mt-2 font-serif text-3xl">{s.t}</h3>
+              <p className="mt-3 max-w-sm text-sm leading-relaxed text-muted">{s.d}</p>
+            </article>
+          ))}
         </div>
-      </div>
-
-      <div className="mx-auto mt-14 grid max-w-6xl grid-cols-2 gap-4 md:mt-20 md:grid-cols-3 md:gap-6">
         <img
-          src="/images/soup-cup.jpg"
-          alt="Крем-суп"
-          className="col-start-1 row-start-2 aspect-square w-28 rounded-sm object-cover md:row-start-1 md:mt-24 md:w-40"
-        />
-        <img
-          src="/images/green-spoon.jpg"
-          alt="Зелень"
-          className="col-start-2 aspect-[4/3] w-full object-cover md:col-start-2 md:row-start-1"
-        />
-        <img
-          src="/images/paprika.jpg"
-          alt="Специи"
-          className="col-start-1 row-start-1 aspect-[4/3] w-full object-cover md:col-start-3"
+          src="/images/fridge.jpg"
+          alt="Холодильник"
+          className="mt-16 h-72 w-full rounded-lg object-cover md:h-[28rem]"
         />
       </div>
-
-      <p className="mx-auto mt-12 max-w-md text-center text-sm leading-relaxed text-muted md:mt-16">
-        Сегодня еда считается слишком сложной. На самом деле достаточно знать,
-        что лежит на полке — и{" "}
-        <span className="rounded-full bg-sage px-2 py-0.5 text-ink">готовить из этого</span>
-        .
-      </p>
     </section>
   );
 }
 
-function History() {
+function Hero() {
   return (
-    <section className="relative overflow-hidden bg-lilac px-5 py-20 text-ink md:px-12 md:py-28">
-      <p className="mb-4 text-center font-serif text-5xl text-lilac-deep md:text-7xl">食</p>
-      <h2 className="text-center font-display text-section font-light leading-[0.85] tracking-tight text-cream">
-        НЕМНОГО
-        <br />
-        ИСТОРИИ
-      </h2>
-
+    <section className="relative overflow-hidden bg-cream">
+      <SiteNav />
+      {/* Парящие продукты: тёплая подача из нашей палитры */}
       <img
-        src="/images/print-woman.jpg"
-        alt="Гравюра"
-        className="absolute right-4 top-28 hidden w-36 md:block lg:right-16 lg:w-48"
+        src="/images/recipes/tomato-soup.jpg"
+        alt=""
+        aria-hidden
+        className="gx-float pointer-events-none absolute -left-8 top-24 hidden size-36 rounded-full object-cover shadow-xl lg:block xl:left-10 xl:size-44"
+      />
+      <img
+        src="/images/recipes/caesar-salad.jpg"
+        alt=""
+        aria-hidden
+        className="gx-float-slow pointer-events-none absolute right-[8%] top-40 hidden size-28 rounded-full object-cover shadow-lg lg:block xl:size-32"
+      />
+      <img
+        src="/images/recipes/creme-brulee.jpg"
+        alt=""
+        aria-hidden
+        className="gx-float pointer-events-none absolute bottom-24 left-[18%] hidden size-24 rounded-full object-cover shadow-lg xl:block"
+        style={{ animationDelay: "1.5s" }}
+      />
+      <img
+        src="/images/recipes/shakshuka.jpg"
+        alt=""
+        aria-hidden
+        className="gx-float-slow pointer-events-none absolute bottom-32 right-[16%] hidden size-20 rounded-full object-cover shadow-lg lg:block"
+        style={{ animationDelay: "2.2s" }}
       />
 
-      <div className="mx-auto mt-16 grid max-w-6xl gap-10 md:grid-cols-2 md:items-end">
-        <div>
-          <p className="font-display text-4xl font-light tracking-tight text-cream md:text-5xl">
-            В КУХНЕ
-          </p>
-          <img
-            src="/images/green-spoon.jpg"
-            alt=""
-            className="mt-3 mb-6 size-14 rounded-full object-cover"
-          />
-          <p className="max-w-md text-sm leading-relaxed text-ink/80">
-            Люди веками учились не выбрасывать еду: из остатков получался бульон,
-            из вчерашнего хлеба — гренки. Gastronomix переносит этот ритуал в
-            телефон и браузер — без пафоса, с калориями.
-          </p>
-          <p className="mt-4 max-w-md text-sm leading-relaxed text-ink/80">
-            Мы начинаем с простого: список продуктов, подбор рецептов, КБЖУ на
-            порцию. Остальное — позже.
-          </p>
+      <div className="relative mx-auto flex min-h-[100svh] max-w-6xl flex-col items-center justify-center px-5 pb-24 pt-32 text-center md:px-10">
+        <span className="gx-rise mb-8 inline-flex size-12 items-center justify-center rounded-full bg-sage-deep text-sm font-semibold text-cream">
+          GX
+        </span>
+        <h1 className="gx-rise font-display text-display font-light leading-[0.82] tracking-tight text-ink md:leading-[0.78]">
+          GASTRO
+          <br />
+          NOMIX
+        </h1>
+        <p className="gx-rise-2 mt-8 max-w-md text-sm leading-relaxed text-muted md:text-base">
+          Цифровой холодильник, каталог из 55 рецептов с КБЖУ, планировщик меню
+          и шеф-ИИ, который подскажет, что приготовить из того, что уже есть.
+        </p>
+        <div className="gx-rise-3 mt-10 flex flex-wrap items-center justify-center gap-4">
+          <Link
+            to="/register"
+            className="flex min-h-12 items-center rounded-full bg-ink px-8 font-medium text-cream transition-transform hover:scale-[1.03]"
+          >
+            Создать аккаунт
+          </Link>
+          <Link
+            to="/login"
+            className="flex min-h-12 items-center rounded-full border border-line bg-paper px-8 font-medium text-ink"
+          >
+            Войти
+          </Link>
         </div>
-        <img
-          src="/images/print-scholar.jpg"
-          alt="Старинная гравюра"
-          className="w-full max-w-md justify-self-end object-cover"
-        />
-      </div>
-
-      <div className="mx-auto mt-16 grid max-w-6xl gap-8 md:grid-cols-[1.2fr_0.8fr] md:items-end">
-        <img
-          src="/images/print-table.jpg"
-          alt="Трапеза"
-          className="w-full object-cover"
-        />
-        <div className="pb-2">
-          <p className="font-display text-5xl font-light text-cream">РАЦИОН</p>
-          <p className="mt-4 text-sm leading-relaxed text-ink/80">
-            Не диета и не медицинский совет. Просто ясность: что есть дома и что
-            из этого можно собрать сегодня вечером.
-          </p>
+        <div className="gx-rise-3 mt-16 flex flex-wrap justify-center gap-6 text-xs text-muted">
+          <span className="rounded-full border border-line bg-paper px-4 py-2">55 рецептов</span>
+          <span className="rounded-full border border-line bg-paper px-4 py-2">КБЖУ на порцию</span>
+          <span className="rounded-full border border-line bg-paper px-4 py-2">Ноль отходов</span>
+          <span className="rounded-full border border-line bg-paper px-4 py-2">✨ Шеф-ИИ</span>
         </div>
       </div>
     </section>
@@ -214,8 +312,9 @@ function How() {
 
 function Invite() {
   return (
-    <section className="bg-sage px-5 py-24 text-center md:py-32">
-      <h2 className="mx-auto mt-4 max-w-3xl font-display text-section font-light leading-[0.85] tracking-tight text-cream">
+    <section className="bg-sage-deep/10 px-5 py-24 text-center md:py-32">
+      <p className="font-serif text-5xl text-sage-deep md:text-7xl">食</p>
+      <h2 className="mx-auto mt-4 max-w-3xl font-display text-section font-light leading-[0.85] tracking-tight text-sage-deep">
         ЗАЙДИТЕ
         <br />
         НА КУХНЮ
@@ -223,13 +322,13 @@ function Invite() {
       <div className="mt-10 flex flex-wrap items-center justify-center gap-4">
         <Link
           to="/register"
-          className="flex min-h-12 items-center rounded-full bg-blush px-8 py-3 font-medium text-ink"
+          className="flex min-h-12 items-center rounded-full bg-ink px-8 py-3 font-medium text-cream transition-transform hover:scale-[1.03]"
         >
           Создать аккаунт
         </Link>
         <Link
           to="/login"
-          className="flex min-h-12 items-center rounded-full border border-ink/20 px-8 py-3 font-medium text-ink"
+          className="flex min-h-12 items-center rounded-full border border-line bg-paper px-8 py-3 font-medium text-ink"
         >
           Войти
         </Link>

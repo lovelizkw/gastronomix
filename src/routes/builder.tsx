@@ -129,6 +129,11 @@ function BuilderPage() {
           КБЖУ считается сразу, а при готовке продукты спишутся из холодильника.
         </p>
 
+        {/* Разобранный боул: выбранные продукты парят слоями над миской */}
+        <div className="mt-10 rounded-lg bg-paper px-6 py-10 md:px-10">
+          <ExplodedBowl chosen={chosen} />
+        </div>
+
         <div className="mt-8 grid gap-5">
           {SLOTS.map((slot, i) => {
             const options = slotProducts(slot);
@@ -201,5 +206,63 @@ function BuilderPage() {
         </div>
       </div>
     </main>
+  );
+}
+
+/**
+ * «Разобранный боул» (референс): слои ингредиентов парят над миской,
+ * подписи чередуются слева и справа. Чем позже добавлен слой, тем ниже он
+ * над миской.
+ */
+function ExplodedBowl({
+  chosen,
+}: {
+  chosen: { slot: Slot; name: string; grams: number }[];
+}) {
+  const colors = ["bg-sage", "bg-lilac", "bg-sage/50", "bg-blush"];
+  const titles = ["БОУЛ", ...chosen.map((c) => c.name.toUpperCase())];
+
+  return (
+    <div className="flex flex-col items-center">
+      {chosen.length === 0 ? (
+        <p className="py-10 text-center text-sm text-muted">
+          Выберите ингредиенты ниже — здесь соберётся ваш боул
+        </p>
+      ) : (
+        <>
+          <div className="mt-2 grid w-full max-w-lg gap-3">
+            {chosen.map((item, i) => (
+              <div
+                key={item.slot.title}
+                className={`gx-float flex items-center gap-3 ${i % 2 === 1 ? "flex-row-reverse" : ""}`}
+                style={{ animationDelay: `${i * 0.6}s` }}
+              >
+                <span className="w-28 text-right text-xs text-muted" dir={i % 2 === 1 ? "rtl" : "ltr"}>
+                  {item.name} · {item.grams} г
+                </span>
+                <span className={`h-6 flex-1 rounded-full ${colors[i % colors.length]} shadow-sm`} />
+                <span className="hidden w-28 text-xs text-muted sm:block">
+                  {item.slot.title.toLowerCase()}
+                </span>
+              </div>
+            ))}
+          </div>
+          {/* Миска: мягкий градиент + тень */}
+          <div className="relative mt-4 size-40 md:size-48">
+            <div className="absolute inset-0 rounded-full bg-ink/10 blur-md" />
+            <div
+              className="absolute inset-0 rounded-full shadow-xl"
+              style={{
+                background:
+                  "radial-gradient(circle at 35% 30%, #d8d3c8 0%, #b9b3a6 45%, #8f8a7d 100%)",
+              }}
+            />
+          </div>
+          <p className="mt-6 text-center font-display text-2xl font-light tracking-[0.2em] text-ink md:text-3xl">
+            {titles.join(" + ")}
+          </p>
+        </>
+      )}
+    </div>
   );
 }

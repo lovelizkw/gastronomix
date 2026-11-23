@@ -21,7 +21,9 @@ import {
   type RecipeFilters,
   type RecipeRow,
 } from "@/lib/kitchen-api";
+import { importRecipeWithLlm } from "@/lib/llm-api";
 import { matchInfo, matchRecipes } from "@/lib/recipes";
+import { ChefChat } from "@/components/chef-chat";
 
 export const Route = createFileRoute("/kitchen")({ component: KitchenPage });
 
@@ -323,6 +325,13 @@ function KitchenPage() {
             Конструктор
           </Link>
           <Link
+            to="/grow"
+            className="min-h-11 rounded-full border border-blush/60 bg-blush/20 px-4 py-2 text-cream"
+            title="Расширить каталог с помощью ИИ"
+          >
+            ✨ ИИ-каталог
+          </Link>
+          <Link
             to="/profile"
             className="min-h-11 rounded-full border border-cream/40 px-4 py-2 text-cream"
           >
@@ -508,6 +517,7 @@ function KitchenPage() {
           </form>
         </div>
       ) : null}
+      <ChefChat />
     </main>
   );
 }
@@ -688,34 +698,45 @@ function Fridge({
           </p>
         </div>
       ) : (
-        <ul className="grid gap-3">
-          {products.map((p) => {
+        <div className="grid gap-6 sm:grid-cols-2 lg:grid-cols-3">
+          {products.map((p, i) => {
             const badge = freshnessBadge(daysLeft(p.expiresAt));
             const color = freshnessColor(p);
             const left = shelfLifeLeft(p);
             return (
-              <li
-                key={p.id}
-                className="flex items-center justify-between gap-4 border-b border-line py-4"
-              >
-                <div className="min-w-0 flex-1">
-                  <p className="flex flex-wrap items-center gap-2 font-serif text-2xl">
+              <article key={p.id} className="gx-card-hover relative rounded-lg bg-paper pb-4">
+                {/* Цветная «плашка» категории, продукт «лежит» сверху */}
+                <div className={`h-28 rounded-t-lg ${plateColor(p.category)}`}>
+                  <span className="absolute -top-4 left-5 flex size-9 items-center justify-center rounded-full bg-ink text-sm font-semibold text-cream">
+                    {i + 1}
+                  </span>
+                  <span className="absolute -top-6 right-6 flex size-14 items-center justify-center rounded-full bg-cream font-serif text-xl text-ink shadow-md">
+                    {p.name.slice(0, 2).toUpperCase()}
+                  </span>
+                  {p.expiresAt ? (
+                    <span className="absolute right-4 top-4 rounded-full bg-cream/90 px-2 py-0.5 text-[10px] text-muted">
+                      {p.expiresAt.slice(5)}
+                    </span>
+                  ) : null}
+                </div>
+                <div className="px-5 pt-3">
+                  <p className="flex flex-wrap items-center gap-2 font-serif text-xl">
                     {p.name}
                     {badge ? (
                       <span
-                        className={`rounded-full px-2 py-0.5 text-[11px] font-medium ${badge.className}`}
+                        className={`rounded-full px-2 py-0.5 text-[10px] font-medium ${badge.className}`}
                       >
                         {badge.label}
                       </span>
                     ) : null}
                   </p>
-                  <p className="text-sm text-muted">
+                  <p className="text-xs text-muted">
                     {p.category}
                     {p.qty ? ` · ${p.qty}` : ""}
                   </p>
                   {/* Светофор свежести: зелёный → жёлтый → красный */}
                   {color && left !== null ? (
-                    <div className="mt-2 max-w-56">
+                    <div className="mt-2">
                       <div className="h-1.5 w-full overflow-hidden rounded-full bg-line">
                         <div
                           className={`h-full rounded-full transition-all ${color.bar}`}
@@ -725,21 +746,37 @@ function Fridge({
                       <p className="mt-1 text-[11px] text-muted">{color.label}</p>
                     </div>
                   ) : null}
+                  <button
+                    type="button"
+                    onClick={() => onRemove(p.id)}
+                    className="mt-3 min-h-8 text-xs text-muted underline"
+                  >
+                    Удалить
+                  </button>
                 </div>
-                <button
-                  type="button"
-                  onClick={() => onRemove(p.id)}
-                  className="min-h-10 text-sm text-muted underline"
-                >
-                  Удалить
-                </button>
-              </li>
+              </article>
             );
           })}
-        </ul>
+        </div>
       )}
     </section>
   );
+}
+
+/** Цвет плашки карточки продукта по категории (референс 4). */
+function plateColor(category: string): string {
+  const map: Record<string, string> = {
+    "Молочное": "bg-lilac/40",
+    "Мясо": "bg-blush/50",
+    "Рыба": "bg-lilac/60",
+    "Овощи": "bg-sage/60",
+    "Фрукты": "bg-sage",
+    "Хлеб": "bg-blush/30",
+    "Яйца": "bg-blush/40",
+    "Крупы": "bg-sage-deep/30",
+    "Бакалея": "bg-lilac/30",
+  };
+  return map[category] ?? "bg-line";
 }
 
 function RecipeList({
@@ -773,6 +810,16 @@ function RecipeList({
   }
 
   const hasFilters = Object.keys(filters).length > 0;
+  // Кухни как чипсы-категории (референс 3) — фильтр по уже загруженному списку.
+  const [cuisine, setCuisine] = useState<string | null>(null);
+  const cuisines = useMemo(
+    () => [...new Set(recipes.map((r) => r.cuisine).filter(Boolean))],
+    [recipes],
+  );
+  const byCuisine = cuisine ? recipes.filter((r) => r.cuisine === cuisine) : recipes;
+  const [heroId, setHeroId] = useState<number | null>(null);
+  const hero = byCuisine.find((r) => r.id === heroId) ?? byCuisine[0] ?? null;
+  const heroMatch = hero ? matchInfo(hero, productNames) : null;
 
   return (
     <section>
@@ -799,7 +846,7 @@ function RecipeList({
             value={filters.q ?? ""}
             onChange={(e) => update({ q: e.target.value })}
             placeholder="Название блюда или ингредиент"
-            className="mt-1 min-h-11 w-full rounded-md border border-line bg-cream px-3 text-sm text-ink"
+            className="mt-1 min-h-11 w-full rounded-full border border-line bg-cream px-4 text-sm text-ink"
           />
         </label>
         <label className="block text-xs text-muted">
@@ -854,19 +901,56 @@ function RecipeList({
         </div>
       </div>
 
-      {loading ? (
-        <p className="py-10 text-sm text-muted">Подбираем рецепты…</p>
-      ) : recipes.length === 0 ? (
-        <div className="border border-dashed border-line px-6 py-16 text-center">
-          <p className="font-serif text-2xl">Ничего не нашлось</p>
-          <p className="mt-2 text-sm text-muted">
-            Попробуйте изменить запрос или сбросить фильтры
-          </p>
-        </div>
-      ) : (
-        <div className="grid gap-8 sm:grid-cols-2">
-          {recipes.map((r) => (
-            <article key={r.id} className="bg-paper">
+      {/* Чипсы категорий + круглая «тарелка» выбранного блюда (референс 3) */}
+      <div className="mb-8 grid gap-8 lg:grid-cols-[1fr_300px]">
+        <div>
+          <div className="flex flex-wrap gap-2">
+            <button
+              type="button"
+              onClick={() => setCuisine(null)}
+              className={`min-h-10 rounded-full px-4 text-sm font-medium ${
+                cuisine === null ? "bg-ink text-cream" : "border border-line bg-paper text-ink"
+              }`}
+            >
+              Всё
+            </button>
+            {cuisines.map((c) => (
+              <button
+                key={c}
+                type="button"
+                onClick={() => {
+                  setCuisine(c === cuisine ? null : c);
+                  setHeroId(null);
+                }}
+                className={`min-h-10 rounded-full px-4 text-sm font-medium ${
+                  cuisine === c ? "bg-ink text-cream" : "border border-line bg-paper text-ink"
+                }`}
+              >
+                {c.charAt(0).toUpperCase() + c.slice(1)}
+              </button>
+            ))}
+          </div>
+
+          {loading ? (
+            <p className="py-10 text-sm text-muted">Подбираем рецепты…</p>
+          ) : byCuisine.length === 0 ? (
+            <div className="mt-8 border border-dashed border-line px-6 py-16 text-center">
+              <p className="font-serif text-2xl">Ничего не нашлось</p>
+              <p className="mt-2 text-sm text-muted">
+                Попробуйте изменить запрос или сбросить фильтры
+              </p>
+            </div>
+          ) : (
+            <div className="mt-6 grid gap-6 sm:grid-cols-2">
+              {byCuisine.map((r) => (
+            <article
+              key={r.id}
+              onMouseEnter={() => setHeroId(r.id)}
+              onFocus={() => setHeroId(r.id)}
+              className={`gx-card-hover cursor-pointer rounded-lg bg-paper transition-colors ${
+                hero?.id === r.id ? "ring-2 ring-sage-deep" : ""
+              }`}
+            >
               <Link
                 to="/recipes/$recipeId"
                 params={{ recipeId: String(r.id) }}
@@ -952,9 +1036,40 @@ function RecipeList({
                 </p>
               </div>
             </article>
-          ))}
+              ))}
+            </div>
+          )}
+
+          {/* Круглая «тарелка» выбранного блюда */}
+          {hero ? (
+            <aside className="sticky top-6 hidden rounded-lg bg-paper p-6 text-center lg:block">
+              <img
+                src={hero.image}
+                alt={hero.title}
+                className="mx-auto size-56 rounded-full object-cover shadow-lg"
+              />
+              <p className="mt-4 font-serif text-xl">{hero.title}</p>
+              <p className="mt-1 text-sm text-muted">
+                {hero.timeLabel} · {hero.kbju.k} ккал · {hero.portions} порц.
+              </p>
+              {heroMatch && heroMatch.total - heroMatch.hits > 0 ? (
+                <p className="mt-2 text-xs text-blush-deep">
+                  Не хватает: {heroMatch.missing.slice(0, 3).join(", ")}
+                </p>
+              ) : (
+                <p className="mt-2 text-xs text-sage-deep">Все продукты на месте</p>
+              )}
+              <Link
+                to="/recipes/$recipeId"
+                params={{ recipeId: String(hero.id) }}
+                className="mt-4 inline-flex min-h-11 items-center rounded-full bg-ink px-6 text-sm font-medium text-cream"
+              >
+                Открыть рецепт
+              </Link>
+            </aside>
+          ) : null}
         </div>
-      )}
+      </div>
     </section>
   );
 }
@@ -972,6 +1087,7 @@ function RecipeForm({
   const [importUrl, setImportUrl] = useState("");
   const [importBusy, setImportBusy] = useState(false);
   const [importError, setImportError] = useState("");
+  const [importNote, setImportNote] = useState("");
   const [title, setTitle] = useState(initial?.title ?? "");
   const [timeLabel, setTimeLabel] = useState(initial?.timeLabel ?? "");
   const [portions, setPortions] = useState(initial?.portions ?? 2);
@@ -997,9 +1113,21 @@ function RecipeForm({
     setImportError("");
     setImportBusy(true);
     try {
-      const parsed = await importRecipeFromUrl({ data: { url: importUrl.trim() } });
+      let parsed: { title: string; ingredients: { name: string; amount: string }[]; instructions: string } | null =
+        null;
+      let viaLlm = false;
+      try {
+        parsed = await importRecipeFromUrl({ data: { url: importUrl.trim() } });
+      } catch {
+        parsed = null;
+      }
       if (!parsed) {
-        setImportError("Не нашли рецепт в разметке сайта. Попробуйте другой адрес.");
+        // На сайте нет разметки schema.org (или он недоступен) — просим LLM.
+        parsed = await importRecipeWithLlm({ data: { url: importUrl.trim() } });
+        viaLlm = true;
+      }
+      if (!parsed) {
+        setImportError("Не нашли рецепт на странице. Попробуйте другой адрес.");
         return;
       }
       setTitle(parsed.title);
@@ -1011,6 +1139,9 @@ function RecipeForm({
       setInstructions(parsed.instructions);
       setImportUrl("");
       setImportError("");
+      if (viaLlm) {
+        setImportNote("Рецепт распознан шеф-ИИ по тексту страницы — проверьте и поправьте детали.");
+      }
     } catch (err) {
       setImportError(String(err instanceof Error ? err.message : err).slice(0, 160));
     } finally {
@@ -1099,6 +1230,9 @@ function RecipeForm({
             </button>
           </div>
           {importError ? <p className="mt-2 text-xs text-red-700">{importError}</p> : null}
+          {importNote ? (
+            <p className="mt-2 rounded-md bg-lilac/30 p-2 text-xs text-ink">✨ {importNote}</p>
+          ) : null}
         </form>
       ) : null}
       <form onSubmit={handleSubmit} className="max-w-xl space-y-4">
