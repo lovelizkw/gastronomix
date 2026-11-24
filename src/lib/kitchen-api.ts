@@ -50,6 +50,8 @@ export type RecipeRow = {
   instructions: string;
   image: string;
   cuisine: string;
+  /** Рецепт сгенерирован шеф-ИИ — на карточке показывается чипс «ИИ». */
+  createdByAi: boolean;
   kbju: { k: number; b: number; j: number; u: number };
   mine: boolean;
   favorite: boolean;
@@ -365,6 +367,7 @@ type RecipeDb = {
   instructions: string;
   image: string;
   cuisine: string;
+  created_by_ai: boolean;
   kcal: number;
   protein: number;
   fat: number;
@@ -377,6 +380,7 @@ function recipeColumns(prefix = ""): string {
   const p = prefix ? `${prefix}.` : "";
   return `${p}id, ${p}user_id, ${p}title, ${p}time_label, ${p}minutes, ${p}ingredients,
           ${p}ingredients_json, ${p}portions, ${p}instructions, ${p}image, ${p}cuisine,
+          ${p}created_by_ai,
           ${p}kcal, ${p}protein, ${p}fat, ${p}carbs`;
 }
 
@@ -401,6 +405,7 @@ function mapRecipe(row: RecipeDb, userId: string): RecipeRow {
     instructions: row.instructions,
     image: row.image,
     cuisine: row.cuisine ?? "",
+    createdByAi: Boolean(row.created_by_ai),
     kbju: { k: row.kcal, b: row.protein, j: row.fat, u: row.carbs },
     mine: row.user_id === userId,
     favorite: Boolean(row.favorite),

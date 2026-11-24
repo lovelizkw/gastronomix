@@ -88,7 +88,9 @@ export const assistantChat = createServerFn({ method: "POST" })
       select name, qty from products where user_id = ${context.userId} order by id desc limit 40
     `;
     const recipes = await sql<{ title: string; minutes: number }>`
-      select title, minutes from recipes where user_id is null order by id limit 40
+      select title, minutes from recipes
+      where user_id is null or user_id = ${context.userId}
+      order by id limit 60
     `;
     const fridge = products.length
       ? products.map((p) => `${p.name} (${p.qty})`).join(", ")
@@ -101,7 +103,8 @@ export const assistantChat = createServerFn({ method: "POST" })
           role: "system",
           content:
             "Ты — дружелюбный шеф-повар в приложении Gastronomix. Отвечай кратко (до 120 слов), " +
-            "по-русски, без markdown-разметки. Учитывай холодильник пользователя и каталог рецептов. " +
+            "по-русски, обычным текстом: не используй символы **, ##, ``` и другие знаки разметки. " +
+            "Учитывай холодильник пользователя и каталог рецептов. " +
             `Холодильник: ${fridge}. Каталог: ${catalog}. ` +
             "Если просят блюдо из имеющегося — предлагай из каталога или простой вариант по шагам.",
         },
@@ -110,7 +113,40 @@ export const assistantChat = createServerFn({ method: "POST" })
       ],
       { maxTokens: 800 },
     );
+
+    // История диалога хранится в БД — общая для всех поверхностей чата
+    // и восстанавливается при следующем входе.
+    await sql`
+      insert into chat_messages (user_id, role, content)
+      values (${context.userId}, 'user', ${data.message})
+    `;
+    if (reply) {
+      await sql`
+        insert into chat_messages (user_id, role, content)
+        values (${context.userId}, 'assistant', ${reply})
+      `;
+    }
     return { reply };
+  });
+
+type ChatRow = { role: string; content: string };
+
+/** Последние сообщения диалога с шеф-ИИ (для восстановления чата). */
+export const getChatHistory = createServerFn({ method: "GET" })
+  .middleware([authMiddleware])
+  .handler(async ({ context }) => {
+    const sql = await getSql();
+    const rows = await sql<ChatRow>`
+      select role, content from (
+        select role, content, created_at
+        from chat_messages
+        where user_id = ${context.userId}
+        order by created_at desc
+        limit 30
+      ) recent
+      order by created_at asc
+    `;
+    return rows.map((r) => ({ role: r.role as "user" | "assistant", content: r.content }));
   });
 
 /* ======================= Генерация рецептов в каталог =================== */
@@ -183,40 +219,35 @@ export const generateRecipes = createServerFn({ method: "POST" })
   });
 
 /**
- * Сохраняет одобренные рецепты в каталог: привязка к автору не ставится —
- * рецепт становится общим. Фото подбирается по совпадению названия с
- * существующими картинками, иначе — нейтральное фото по умолчанию.
+ * Сохраняет одобренные рецепты за автором пользователя: рецепт считается
+ * личным (можно отредактировать и добавить своё фото), фото у него нет —
+ * карточка предлагает добавить изображение. Пометка created_by_ai включает
+ * чипс «ИИ» на карточке.
  */
 export const saveGeneratedRecipes = createServerFn({ method: "POST" })
   .middleware([authMiddleware])
   .validator(z.object({ recipes: z.array(GeneratedRecipe).min(1).max(5) }))
   .handler(async ({ context, data }) => {
     const sql = await getSql();
-    const images = await sql<{ image: string; title: string }>`
-      select image, title from recipes where user_id is null
-    `;
     const created: string[] = [];
     for (const recipe of data.recipes) {
       const exists = await sql`
-        select 1 from recipes where user_id is null and lower(title) = lower(${recipe.title})
+        select 1 from recipes
+        where (user_id is null or user_id = ${context.userId})
+          and lower(title) = lower(${recipe.title})
       `;
       if (exists.length > 0) continue;
-      const lowerTitle = recipe.title.toLowerCase();
-      const matched =
-        images.find((i) => lowerTitle.includes(i.title.toLowerCase().slice(0, 8)))?.image ??
-        images.find((i) => i.title.toLowerCase().includes(lowerTitle.slice(0, 8)))?.image ??
-        "/images/recipes/tomato-soup.jpg";
       const minutesMatch = recipe.timeLabel.match(/\d+/);
       await sql`
         insert into recipes (
           user_id, title, time_label, minutes, ingredients, ingredients_json, portions,
-          instructions, image, kcal, protein, fat, carbs, cuisine
+          instructions, image, kcal, protein, fat, carbs, cuisine, created_by_ai
         ) values (
-          null, ${recipe.title}, ${recipe.timeLabel}, ${Number(minutesMatch?.[0]) || 30},
+          ${context.userId}, ${recipe.title}, ${recipe.timeLabel}, ${Number(minutesMatch?.[0]) || 30},
           ${recipe.ingredients.map((i) => i.name).join(", ")},
           ${JSON.stringify(recipe.ingredients)}::jsonb, ${recipe.portions},
-          ${recipe.instructions}, ${matched}, ${recipe.kcal}, ${recipe.protein},
-          ${recipe.fat}, ${recipe.carbs}, ${recipe.cuisine || "европейская"}
+          ${recipe.instructions}, '', ${recipe.kcal}, ${recipe.protein},
+          ${recipe.fat}, ${recipe.carbs}, ${recipe.cuisine || "европейская"}, true
         )
       `;
       created.push(recipe.title);

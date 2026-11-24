@@ -988,9 +988,22 @@ function RecipeList({
             return (
               <article key={r.id} className="gx-card-hover overflow-hidden rounded-xl bg-paper shadow-sm">
                 <div className="relative">
-                  <Link to="/recipes/$recipeId" params={{ recipeId: String(r.id) }}>
-                    <img src={r.image} alt={r.title} className="h-44 w-full object-cover" />
-                  </Link>
+                  {r.image ? (
+                    <Link to="/recipes/$recipeId" params={{ recipeId: String(r.id) }}>
+                      <img src={r.image} alt={r.title} className="h-44 w-full object-cover" />
+                    </Link>
+                  ) : (
+                    <Link
+                      to="/recipes/$recipeId"
+                      params={{ recipeId: String(r.id) }}
+                      className="flex h-44 w-full flex-col items-center justify-center gap-2 bg-lilac/20 text-muted"
+                    >
+                      <span className="font-serif text-lg text-ink">Фото пока нет</span>
+                      {r.mine ? (
+                        <span className="text-xs">Добавьте своё — через «Изменить»</span>
+                      ) : null}
+                    </Link>
+                  )}
                   <button
                     type="button"
                     onClick={() => onToggleFavorite(r.id)}
@@ -1002,15 +1015,16 @@ function RecipeList({
                   >
                     {r.favorite ? "♥" : "♡"}
                   </button>
-                  {r.mine ? (
-                    <span className="absolute left-3 top-3 rounded-full bg-cream/90 px-2 py-0.5 text-[10px] font-medium text-ink">
-                      Ваш рецепт
+                  <span className="absolute left-3 top-3 flex gap-1">
+                    {r.createdByAi ? (
+                      <span className="rounded-full bg-lilac px-2 py-0.5 text-[10px] font-medium text-ink">
+                        ИИ
+                      </span>
+                    ) : null}
+                    <span className="rounded-full bg-cream/90 px-2 py-0.5 text-[10px] font-medium text-ink">
+                      {r.mine ? "Ваш рецепт" : "Каталог"}
                     </span>
-                  ) : (
-                    <span className="absolute left-3 top-3 rounded-full bg-cream/90 px-2 py-0.5 text-[10px] font-medium text-ink">
-                      Каталог
-                    </span>
-                  )}
+                  </span>
                 </div>
                 <div className="p-4">
                   <Link

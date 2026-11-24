@@ -211,11 +211,22 @@ function RecipePage() {
           </div>
         ) : (
           <article className="mt-6 overflow-hidden rounded-lg bg-paper">
-            <img
-              src={recipe.image}
-              alt={recipe.title}
-              className="h-64 w-full object-cover md:h-96"
-            />
+            {recipe.image ? (
+              <img
+                src={recipe.image}
+                alt={recipe.title}
+                className="h-64 w-full object-cover md:h-96"
+              />
+            ) : (
+              <div className="flex h-64 flex-col items-center justify-center gap-2 bg-lilac/20 md:h-96">
+                <span className="font-serif text-2xl text-ink">Фото пока нет</span>
+                {recipe.mine ? (
+                  <span className="text-sm text-muted">
+                    Добавьте своё фото через «Изменить» на кухне
+                  </span>
+                ) : null}
+              </div>
+            )}
             <div className="p-6 md:p-8">
               <div className="flex flex-wrap items-start justify-between gap-4">
                 <div>
@@ -225,6 +236,7 @@ function RecipePage() {
                   <p className="mt-2 text-sm text-muted">
                     {recipe.timeLabel} · {recipe.portions} порц.
                     {recipe.cuisine ? ` · ${recipe.cuisine} кухня` : ""}
+                    {recipe.createdByAi ? " · рецепт от ИИ" : ""}
                     {recipe.mine ? " · ваш рецепт" : " · каталог"}
                   </p>
                 </div>

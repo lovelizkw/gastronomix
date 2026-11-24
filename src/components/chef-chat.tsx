@@ -1,5 +1,5 @@
 import { FormEvent, useEffect, useRef, useState } from "react";
-import { assistantChat } from "@/lib/llm-api";
+import { assistantChat, getChatHistory } from "@/lib/llm-api";
 
 type ChatMessage = { role: "user" | "assistant"; content: string };
 
@@ -17,6 +17,20 @@ export function ChefChat() {
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
   const listRef = useRef<HTMLDivElement | null>(null);
+
+  // История диалога хранится в БД по аккаунту и восстанавливается при входе.
+  useEffect(() => {
+    let cancelled = false;
+    getChatHistory()
+      .then((rows) => {
+        if (cancelled || rows.length === 0) return;
+        setMessages(rows);
+      })
+      .catch(() => null);
+    return () => {
+      cancelled = true;
+    };
+  }, []);
 
   useEffect(() => {
     listRef.current?.scrollTo({ top: listRef.current.scrollHeight });
