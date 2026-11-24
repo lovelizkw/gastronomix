@@ -386,8 +386,6 @@ function KitchenPage() {
         ) : tab === "recipes" ? (
           <RecipeList
             recipes={visibleRecipes}
-            hidden={hidden}
-            productNames={productNames}
             filters={filters}
             loading={recipesLoading}
             onFiltersChange={setFilters}
@@ -788,10 +786,56 @@ function plateTint(category: string): string {
   return map[category] ?? "bg-line";
 }
 
+/** Категории витрины (референс 2) и привязка рецептов по ключевым словам. */
+const CATEGORIES: { key: string; label: string; image: string; keywords: string[] }[] = [
+  {
+    key: "breakfast",
+    label: "Завтрак",
+    image: "/images/recipes/blini.jpg",
+    keywords: ["блин", "омлет", "яичниц", "сырник", "овсян", "запекан", "тост", "панкейк", "гранола", "каша", "французские тосты", "английский завтрак", "онигири"],
+  },
+  {
+    key: "lunch",
+    label: "Обед",
+    image: "/images/recipes/borscht.jpg",
+    keywords: ["суп", "борщ", "харчо", "гаспачо", "чечевич", "оливье", "шуба", "винегрет", "нисуаз", "бульон", "том-ям", "хумус", "табуле", "салат"],
+  },
+  {
+    key: "dinner",
+    label: "Ужин",
+    image: "/images/recipes/shashlik.jpg",
+    keywords: ["шашлык", "люля", "манты", "долма", "лагман", "карри", "паста", "ризотто", "плов", "тефтел", "фахитас", "буррито", "тако", "чили", "мусака", "гуляш", "бефстроганов", "чахохбили", "хачапури", "пицца", "наггетс", "крылышки", "котлета по-киевски", "макароны", "курица с рисом", "курица с грибами"],
+  },
+  {
+    key: "healthy",
+    label: "Здоровая еда",
+    image: "/images/recipes/quinoa-salad.jpg",
+    keywords: ["киноа", "табуле", "хумус", "гречк", "винегрет", "овощное", "тыквенн", "капрезе", "паста с курицей и брокколи", "оливье"],
+  },
+  {
+    key: "snacks",
+    label: "Закуски",
+    image: "/images/recipes/nachos.jpg",
+    keywords: ["брускетта", "начос", "сэндвич", "темпура", "фалафель", "крылышк", "наггетс", "онигири", "сухарик"],
+  },
+  {
+    key: "desserts",
+    label: "Десерты",
+    image: "/images/recipes/tiramisu.jpg",
+    keywords: ["тирамису", "чизкейк", "панна", "брауни", "маффин", "печенье", "яблоки", "крем-брюле", "шарлотка", "пудинг", "блины на молоке"],
+  },
+];
+
+function recipeCategory(title: string): { key: string; label: string } {
+  const lower = title.toLowerCase();
+  for (const cat of CATEGORIES) {
+    if (cat.keywords.some((k) => lower.includes(k))) return { key: cat.key, label: cat.label };
+  }
+  return { key: "dinner", label: "Ужин" };
+}
+
 function RecipeList({
   recipes,
-  hidden,
-  productNames,
   filters,
   loading,
   onFiltersChange,
@@ -800,8 +844,6 @@ function RecipeList({
   onDelete,
 }: {
   recipes: RecipeRow[];
-  hidden: number;
-  productNames: string[];
   filters: RecipeFilters;
   loading: boolean;
   onFiltersChange: (filters: RecipeFilters) => void;
@@ -819,267 +861,193 @@ function RecipeList({
   }
 
   const hasFilters = Object.keys(filters).length > 0;
-  const catalogCount = useMemo(() => recipes.filter((r) => !r.userId).length, [recipes]);
-  // Кухни как чипсы-категории (референс 3) — фильтр по уже загруженному списку.
-  const [cuisine, setCuisine] = useState<string | null>(null);
-  const cuisines = useMemo(
-    () => [...new Set(recipes.map((r) => r.cuisine).filter(Boolean))],
-    [recipes],
+  // Категории из референса 2: плитки с фото фильтруют выдачу.
+  const [category, setCategory] = useState<string | null>(null);
+  const categoryRecipes = useMemo(
+    () => (category ? recipes.filter((r) => recipeCategory(r.title).key === category) : recipes),
+    [recipes, category],
   );
-  const byCuisine = cuisine ? recipes.filter((r) => r.cuisine === cuisine) : recipes;
-  const [heroId, setHeroId] = useState<number | null>(null);
-  const hero = byCuisine.find((r) => r.id === heroId) ?? byCuisine[0] ?? null;
-  const heroMatch = hero ? matchInfo(hero, productNames) : null;
 
   return (
     <section>
-      <h1 className="font-display text-5xl font-light tracking-tight text-sage-deep md:text-7xl">
-        РЕЦЕПТЫ
-      </h1>
-      <p className="mt-2 text-sm text-muted">
-        {catalogCount > 0 ? `${catalogCount}` : "Каталог"} блюд в каталоге плюс ваши
-        собственные. КБЖУ на порцию.
-        {hidden > 0 ? (
-          <>
-            {" "}
-            <span className="text-blush-deep">
-              {hidden} скрыто по вашим ограничениям
-            </span>
-          </>
-        ) : null}
-      </p>
-
-      <div className="mt-6 mb-8 grid gap-3 rounded-lg bg-paper p-4 sm:grid-cols-2 lg:grid-cols-4">
-        <label className="block text-xs text-muted sm:col-span-2">
-          Поиск
+      {/* Баннер с поиском (референс 2) */}
+      <div className="relative overflow-hidden rounded-2xl">
+        <img
+          src="/images/recipes/tiramisu.jpg"
+          alt=""
+          className="h-64 w-full object-cover md:h-80"
+        />
+        <div className="absolute inset-0 bg-gradient-to-t from-ink/80 via-ink/30 to-transparent" />
+        <div className="absolute left-6 top-6 md:left-8 md:top-8">
+          <span className="rounded-full bg-cream px-3 py-1 text-xs font-medium text-ink">
+            Дома теплее
+          </span>
+          <h1 className="mt-3 max-w-md font-display text-4xl font-light leading-[0.9] tracking-tight text-cream md:text-6xl">
+            ВРЕМЯ СДЕЛАТЬ ПЕРЕРЫВ НА ВКУСНОЕ
+          </h1>
+        </div>
+        <form
+          onSubmit={(e) => e.preventDefault()}
+          className="absolute inset-x-5 bottom-5 flex items-center gap-2 rounded-full bg-cream p-2 shadow-lg md:inset-x-8"
+        >
+          <span className="pl-4 text-muted">⌕</span>
           <input
             type="search"
             value={filters.q ?? ""}
             onChange={(e) => update({ q: e.target.value })}
-            placeholder="Название блюда или ингредиент"
-            className="mt-1 min-h-11 w-full rounded-full border border-line bg-cream px-4 text-sm text-ink"
+            placeholder="Что вы хотите приготовить сегодня?"
+            className="min-h-11 flex-1 bg-transparent px-2 text-sm text-ink outline-none"
           />
-        </label>
-        <label className="block text-xs text-muted">
-          Калорий не больше
-          <select
-            value={filters.maxKcal ?? ""}
-            onChange={(e) => update({ maxKcal: e.target.value ? Number(e.target.value) : undefined })}
-            className="mt-1 min-h-11 w-full rounded-md border border-line bg-cream px-3 text-sm text-ink"
+          <button
+            type="submit"
+            className="min-h-11 shrink-0 rounded-full bg-sage-deep px-6 text-sm font-medium text-cream"
           >
-            <option value="">Любая</option>
-            <option value="200">200 ккал</option>
-            <option value="300">300 ккал</option>
-            <option value="400">400 ккал</option>
-            <option value="500">500 ккал</option>
-          </select>
-        </label>
-        <label className="block text-xs text-muted">
-          Время
-          <select
-            value={filters.maxMinutes ?? ""}
-            onChange={(e) =>
-              update({ maxMinutes: e.target.value ? Number(e.target.value) : undefined })
-            }
-            className="mt-1 min-h-11 w-full rounded-md border border-line bg-cream px-3 text-sm text-ink"
-          >
-            <option value="">Любое</option>
-            <option value="15">до 15 мин</option>
-            <option value="30">до 30 мин</option>
-            <option value="45">до 45 мин</option>
-            <option value="60">до 60 мин</option>
-          </select>
-        </label>
-        <div className="flex flex-wrap items-center gap-4 sm:col-span-2 lg:col-span-4">
-          <label className="flex min-h-11 items-center gap-2 text-sm">
-            <input
-              type="checkbox"
-              checked={Boolean(filters.favoritesOnly)}
-              onChange={(e) => update({ favoritesOnly: e.target.checked })}
-              className="size-4"
-            />
-            Только избранное
-          </label>
-          {hasFilters ? (
-            <button
-              type="button"
-              onClick={() => onFiltersChange({})}
-              className="min-h-10 text-sm text-muted underline"
-            >
-              Сбросить фильтры
-            </button>
-          ) : null}
-        </div>
+            Найти
+          </button>
+        </form>
       </div>
 
-      {/* Чипсы категорий + круглая «тарелка» выбранного блюда (референс 3) */}
-      <div className="mb-8 grid gap-8 2xl:grid-cols-[1fr_300px]">
-        <div>
-          <div className="flex flex-wrap gap-2">
-            <button
-              type="button"
-              onClick={() => setCuisine(null)}
-              className={`min-h-10 rounded-full px-4 text-sm font-medium ${
-                cuisine === null ? "bg-ink text-cream" : "border border-line bg-paper text-ink"
-              }`}
-            >
-              Всё
-            </button>
-            {cuisines.map((c) => (
-              <button
-                key={c}
-                type="button"
-                onClick={() => {
-                  setCuisine(c === cuisine ? null : c);
-                  setHeroId(null);
-                }}
-                className={`min-h-10 rounded-full px-4 text-sm font-medium ${
-                  cuisine === c ? "bg-ink text-cream" : "border border-line bg-paper text-ink"
-                }`}
-              >
-                {c.charAt(0).toUpperCase() + c.slice(1)}
-              </button>
-            ))}
-          </div>
+      {/* Мягкие фильтры под баннером */}
+      <div className="mt-6 flex flex-wrap items-center gap-3">
+        <select
+          value={filters.maxKcal ?? ""}
+          onChange={(e) => update({ maxKcal: e.target.value ? Number(e.target.value) : undefined })}
+          className="min-h-10 rounded-full border border-line bg-paper px-4 text-sm text-ink"
+        >
+          <option value="">Любая калорийность</option>
+          <option value="200">до 200 ккал</option>
+          <option value="300">до 300 ккал</option>
+          <option value="400">до 400 ккал</option>
+          <option value="500">до 500 ккал</option>
+        </select>
+        <select
+          value={filters.maxMinutes ?? ""}
+          onChange={(e) =>
+            update({ maxMinutes: e.target.value ? Number(e.target.value) : undefined })
+          }
+          className="min-h-10 rounded-full border border-line bg-paper px-4 text-sm text-ink"
+        >
+          <option value="">Любое время</option>
+          <option value="15">до 15 мин</option>
+          <option value="30">до 30 мин</option>
+          <option value="45">до 45 мин</option>
+          <option value="60">до 60 мин</option>
+        </select>
+        <label className="flex min-h-10 items-center gap-2 text-sm">
+          <input
+            type="checkbox"
+            checked={Boolean(filters.favoritesOnly)}
+            onChange={(e) => update({ favoritesOnly: e.target.checked })}
+            className="size-4"
+          />
+          Только избранное
+        </label>
+        {hasFilters ? (
+          <button
+            type="button"
+            onClick={() => onFiltersChange({})}
+            className="min-h-10 text-sm text-muted underline"
+          >
+            Сбросить
+          </button>
+        ) : null}
+      </div>
 
-          {loading ? (
-            <p className="py-10 text-sm text-muted">Подбираем рецепты…</p>
-          ) : byCuisine.length === 0 ? (
-            <div className="mt-8 border border-dashed border-line px-6 py-16 text-center">
-              <p className="font-serif text-2xl">Ничего не нашлось</p>
-              <p className="mt-2 text-sm text-muted">
-                Попробуйте изменить запрос или сбросить фильтры
-              </p>
-            </div>
-          ) : (
-            <div className="mt-6 grid grid-cols-[repeat(auto-fill,minmax(230px,1fr))] gap-5">
-              {byCuisine.map((r) => (
-            <article
-              key={r.id}
-              onMouseEnter={() => setHeroId(r.id)}
-              onFocus={() => setHeroId(r.id)}
-              className={`gx-card-hover cursor-pointer rounded-lg bg-paper transition-colors ${
-                hero?.id === r.id ? "ring-2 ring-sage-deep" : ""
-              }`}
-            >
-              <Link
-                to="/recipes/$recipeId"
-                params={{ recipeId: String(r.id) }}
-                className="block"
-              >
-                <img src={r.image} alt={r.title} className="h-40 w-full object-cover" />
-              </Link>
-              <div className="p-4">
-                <div className="flex items-start justify-between gap-2">
+      {/* Плитки категорий (референс 2) */}
+      <div className="mt-6 grid grid-cols-2 gap-4 sm:grid-cols-3">
+        {CATEGORIES.map((cat) => (
+          <button
+            key={cat.key}
+            type="button"
+            onClick={() => setCategory(category === cat.key ? null : cat.key)}
+            className={`relative overflow-hidden rounded-xl transition-shadow ${
+              category === cat.key ? "ring-2 ring-sage-deep" : "hover:shadow-lg"
+            }`}
+          >
+            <img src={cat.image} alt="" className="h-32 w-full object-cover md:h-36" />
+            <div className="absolute inset-0 bg-gradient-to-t from-ink/70 to-transparent" />
+            <span className="absolute bottom-3 left-4 font-medium text-cream">{cat.label}</span>
+          </button>
+        ))}
+      </div>
+
+      {/* Все рецепты — чистые карточки (референс 3) */}
+      <div className="mt-10 grid grid-cols-[repeat(auto-fill,minmax(250px,1fr))] gap-6">
+        {loading ? (
+          <p className="col-span-full py-10 text-sm text-muted">Подбираем рецепты…</p>
+        ) : categoryRecipes.length === 0 ? (
+          <div className="col-span-full rounded-lg bg-paper px-6 py-16 text-center shadow-sm">
+            <p className="font-serif text-2xl">Ничего не нашлось</p>
+            <p className="mt-2 text-sm text-muted">
+              Попробуйте изменить запрос или сбросить фильтры
+            </p>
+          </div>
+        ) : (
+          categoryRecipes.map((r) => {
+            const cat = recipeCategory(r.title);
+            return (
+              <article key={r.id} className="gx-card-hover overflow-hidden rounded-xl bg-paper shadow-sm">
+                <div className="relative">
+                  <Link to="/recipes/$recipeId" params={{ recipeId: String(r.id) }}>
+                    <img src={r.image} alt={r.title} className="h-44 w-full object-cover" />
+                  </Link>
+                  <button
+                    type="button"
+                    onClick={() => onToggleFavorite(r.id)}
+                    aria-label={r.favorite ? "Убрать из избранного" : "Добавить в избранное"}
+                    aria-pressed={r.favorite}
+                    className={`absolute right-3 top-3 flex size-9 items-center justify-center rounded-full text-lg leading-none shadow ${
+                      r.favorite ? "bg-blush text-ink" : "bg-cream/90 text-muted"
+                    }`}
+                  >
+                    {r.favorite ? "♥" : "♡"}
+                  </button>
+                  {r.mine ? (
+                    <span className="absolute left-3 top-3 rounded-full bg-cream/90 px-2 py-0.5 text-[10px] font-medium text-ink">
+                      Ваш рецепт
+                    </span>
+                  ) : (
+                    <span className="absolute left-3 top-3 rounded-full bg-cream/90 px-2 py-0.5 text-[10px] font-medium text-ink">
+                      Каталог
+                    </span>
+                  )}
+                </div>
+                <div className="p-4">
                   <Link
                     to="/recipes/$recipeId"
                     params={{ recipeId: String(r.id) }}
-                    className="font-serif text-xl leading-snug hover:underline"
+                    className="font-medium leading-snug hover:underline"
                   >
                     {r.title}
                   </Link>
-                  <div className="flex shrink-0 items-center gap-2">
-                    <button
-                      type="button"
-                      onClick={() => onToggleFavorite(r.id)}
-                      aria-label={r.favorite ? "Убрать из избранного" : "Добавить в избранное"}
-                      aria-pressed={r.favorite}
-                      className={`min-h-9 min-w-9 rounded-full text-lg leading-none ${
-                        r.favorite ? "bg-blush text-ink" : "bg-sage/40 text-muted"
-                      }`}
-                    >
-                      {r.favorite ? "♥" : "♡"}
-                    </button>
-                    {r.mine ? (
-                      <span className="flex gap-2 text-xs">
-                        <button
-                          type="button"
-                          onClick={() => onEdit(r)}
-                          className="text-muted underline"
-                        >
-                          Изменить
-                        </button>
-                        <button
-                          type="button"
-                          onClick={() => onDelete(r.id)}
-                          className="text-muted underline"
-                        >
-                          Удалить
-                        </button>
-                      </span>
-                    ) : (
-                      <span className="rounded-full bg-sage px-2 py-1 text-[10px] tracking-wide uppercase">
-                        Каталог
-                      </span>
-                    )}
-                  </div>
-                </div>
-                <p className="mt-1 text-xs text-muted">
-                  {r.timeLabel} · {r.portions} порц.
-                  {r.cuisine ? ` · ${r.cuisine}` : ""}
-                </p>
-                {(() => {
-                  const info = matchInfo(r, productNames);
-                  if (info.hits === 0) return null;
-                  const missingText =
-                    info.total - info.hits > 0
-                      ? `не хватает: ${info.missing.slice(0, 2).join(", ")}`
-                      : "все продукты на месте";
-                  return (
-                    <p className="mt-2 text-xs font-medium text-sage-deep">
-                      {info.hits} из {info.total} продуктов дома — {missingText}
+                  <p className="mt-2 text-xs text-muted">
+                    {r.timeLabel} · {r.portions} порц. · {r.ingredients.length} ингредиент
+                    {r.ingredients.length % 10 === 1 && r.ingredients.length % 100 !== 11 ? "" : "ов"}
+                  </p>
+                  <p className="mt-2 text-xs font-medium text-sage-deep">{r.kbju.k} ккал</p>
+                  <p className="mt-2 flex flex-wrap items-center gap-1 text-xs text-muted">
+                    <span>{cat.label}</span>
+                    {r.cuisine ? <span>· {r.cuisine}</span> : null}
+                  </p>
+                  {r.mine ? (
+                    <p className="mt-3 flex gap-3 text-xs">
+                      <button type="button" onClick={() => onEdit(r)} className="text-muted underline">
+                        Изменить
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => onDelete(r.id)}
+                        className="text-muted underline"
+                      >
+                        Удалить
+                      </button>
                     </p>
-                  );
-                })()}
-                <ul className="mt-2 grid gap-1 text-xs">
-                  {r.ingredients.slice(0, 4).map((ing, i) => (
-                    <li key={i} className="flex justify-between gap-2 border-b border-line/60 pb-1">
-                      <span>{ing.name}</span>
-                      {ing.amount ? <span className="text-muted">{ing.amount}</span> : null}
-                    </li>
-                  ))}
-                </ul>
-                <p className="mt-3 flex flex-wrap gap-1.5 text-[11px] font-medium">
-                  <span className="rounded-full bg-sage px-2.5 py-1">{r.kbju.k} ккал</span>
-                  <span className="rounded-full bg-sage/50 px-2.5 py-1">Б {r.kbju.b}г</span>
-                  <span className="rounded-full bg-sage/50 px-2.5 py-1">Ж {r.kbju.j}г</span>
-                  <span className="rounded-full bg-sage/50 px-2.5 py-1">У {r.kbju.u}г</span>
-                </p>
-              </div>
-            </article>
-              ))}
-            </div>
-          )}
-
-          {/* Круглая «тарелка» выбранного блюда */}
-          {hero ? (
-            <aside className="sticky top-6 hidden rounded-lg bg-paper p-6 text-center 2xl:block">
-              <img
-                src={hero.image}
-                alt={hero.title}
-                className="mx-auto size-56 rounded-full object-cover shadow-lg"
-              />
-              <p className="mt-4 font-serif text-xl">{hero.title}</p>
-              <p className="mt-1 text-sm text-muted">
-                {hero.timeLabel} · {hero.kbju.k} ккал · {hero.portions} порц.
-              </p>
-              {heroMatch && heroMatch.total - heroMatch.hits > 0 ? (
-                <p className="mt-2 text-xs text-blush-deep">
-                  Не хватает: {heroMatch.missing.slice(0, 3).join(", ")}
-                </p>
-              ) : (
-                <p className="mt-2 text-xs text-sage-deep">Все продукты на месте</p>
-              )}
-              <Link
-                to="/recipes/$recipeId"
-                params={{ recipeId: String(hero.id) }}
-                className="mt-4 inline-flex min-h-11 items-center rounded-full bg-ink px-6 text-sm font-medium text-cream"
-              >
-                Открыть рецепт
-              </Link>
-            </aside>
-          ) : null}
-        </div>
+                  ) : null}
+                </div>
+              </article>
+            );
+          })
+        )}
       </div>
     </section>
   );
