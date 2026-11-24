@@ -1,12 +1,12 @@
 import "./load-env.server";
 
 /**
- * Клиент YandexGPT для серверных функций.
- * Ключ и ID каталога задаются в .env: YC_API_KEY, YC_FOLDER_ID.
+ * Клиент YandexGPT (Yandex Cloud AI Studio, Responses API) для серверных
+ * функций. Ключ и каталог задаются в .env: YC_API_KEY, YC_FOLDER_ID.
  * Если их нет, функции ИИ честно сообщают об этом.
  */
 
-const YANDEX_URL = "https://llm.api.cloud.yandex.net/foundationModels/v1/completion";
+const RESPONSES_URL = "https://ai.api.cloud.yandex.net/v1/responses";
 
 export function llmEnabled(): boolean {
   return Boolean(process.env.YC_API_KEY?.trim() && process.env.YC_FOLDER_ID?.trim());
@@ -16,7 +16,9 @@ export type LlmMessage = { role: "system" | "user" | "assistant"; content: strin
 
 function friendlyError(status: number, text: string): Error {
   if (status === 401 || status === 403) {
-    return new Error("YandexGPT отклонил ключ — проверьте YC_API_KEY / YC_FOLDER_ID в файле .env");
+    return new Error(
+      "YandexGPT отклонил ключ или права — проверьте YC_API_KEY / YC_FOLDER_ID и роль ai.assistants.editor у сервисного аккаунта",
+    );
   }
   if (status === 402) {
     return new Error("На балансе Yandex Cloud нет средств — проверьте статус гранта в консоли облака");
@@ -27,7 +29,21 @@ function friendlyError(status: number, text: string): Error {
   return new Error(`ИИ ответил ошибкой ${status}: ${text.slice(0, 160)}`);
 }
 
-/** Один запрос к модели; возвращает текст ответа. */
+type ResponsesPayload = {
+  output?: { content?: { text?: string; type?: string }[] }[];
+  status?: string;
+};
+
+function extractText(payload: ResponsesPayload): string {
+  return (payload.output ?? [])
+    .flatMap((item) => item.content ?? [])
+    .filter((c) => c.type === "output_text" || typeof c.text === "string")
+    .map((c) => c.text ?? "")
+    .join("\n")
+    .trim();
+}
+
+/** Один запрос к YandexGPT; возвращает текст ответа. */
 export async function llmComplete(
   messages: LlmMessage[],
   options: { json?: boolean; maxTokens?: number } = {},
@@ -39,20 +55,29 @@ export async function llmComplete(
       "Шеф-ИИ не подключён: задайте YC_API_KEY и YC_FOLDER_ID в файле .env проекта",
     );
   }
-  const maxTokens = options.maxTokens ?? 2000;
   const model = process.env.YC_MODEL?.trim() || "yandexgpt-lite";
 
-  const res = await fetch(YANDEX_URL, {
+  // system-сообщения уходят в instructions, остальные — в input (история чата).
+  const instructions = messages
+    .filter((m) => m.role === "system")
+    .map((m) => m.content)
+    .join("\n");
+  const input = messages
+    .filter((m) => m.role !== "system")
+    .map((m) => ({ role: m.role as "user" | "assistant", content: m.content }));
+
+  const res = await fetch(RESPONSES_URL, {
     method: "POST",
     headers: {
       "Content-Type": "application/json",
       Authorization: `Api-Key ${apiKey}`,
     },
     body: JSON.stringify({
-      modelUri: `gpt://${folderId}/${model}/latest`,
-      messages: messages.map((m) => ({ role: m.role, text: m.content })),
-      maxTokens,
+      model: `gpt://${folderId}/${model}/latest`,
+      ...(instructions ? { instructions } : {}),
+      input,
       temperature: options.json ? 0.3 : 0.6,
+      max_output_tokens: options.maxTokens ?? 2000,
     }),
     signal: AbortSignal.timeout(90_000),
   });
@@ -61,10 +86,8 @@ export async function llmComplete(
     throw friendlyError(res.status, text);
   }
 
-  const json = (await res.json()) as {
-    result?: { alternatives?: { message?: { text?: string } }[] };
-  };
-  return json.result?.alternatives?.[0]?.message?.text?.trim() ?? "";
+  const payload = (await res.json()) as ResponsesPayload;
+  return extractText(payload);
 }
 
 /** Запрос с ожиданием корректного JSON в ответе. */
