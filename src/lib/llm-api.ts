@@ -42,8 +42,12 @@ export const importRecipeWithLlm = createServerFn({ method: "POST" })
         content:
           "Ты извлекаешь рецепты из текста кулинарных страниц. Отвечай ТОЛЬКО JSON " +
           'формата: {"title": "...", "ingredients": [{"name": "...", "amount": "..."}], ' +
-          '"instructions": "1. шаг\\n2. шаг"}. Названия и количества — на русском, ' +
-          "как в исходном рецепте. Если это не рецепт — верни пустой ingredients.",
+          '"instructions": "1. шаг\\n2. шаг"}. Правила для ingredients: name — ТОЛЬКО ' +
+          "название продукта без чисел и единиц измерения; amount — количество " +
+          "(«200 г», «2 шт», «1 стакан»). Если в тексте встречаются эквиваленты " +
+          "вроде «= 210 г» — оставь их в amount через пробел или выбрось. Названия и " +
+          "количества — на русском, как в исходном рецепте. Если это не рецепт — " +
+          "верни пустой ingredients.",
       },
       { role: "user", content: pageText },
     ], 2500);
@@ -119,7 +123,20 @@ const GeneratedRecipe = z.object({
   ingredients: z
     .array(z.object({ name: z.string().trim().min(1).max(80), amount: z.string().trim().max(40) }))
     .min(1)
-    .max(30),
+    .max(30)
+    .transform((list) =>
+      list
+        .map((i) => ({
+          // Название — без эквивалентов «= 210 г» и прочего мусора.
+          name: i.name
+            .replace(/=\s*\d+(?:[.,]\d+)?\s*(?:г|гр|мл|л|кг|шт)?\s*/gi, "")
+            .replace(/[()]+/g, "")
+            .replace(/\s{2,}/g, " ")
+            .trim(),
+          amount: i.amount,
+        }))
+        .filter((i) => i.name.replace(/[^a-zA-Zа-яА-ЯёЁ]/g, "").length >= 2),
+    ),
   instructions: z.string().trim().min(1).max(2000),
   kcal: z.number().int().min(0).max(5000),
   protein: z.number().int().min(0).max(500),

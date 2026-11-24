@@ -1,4 +1,4 @@
-import { createFileRoute, Link } from "@tanstack/react-router";
+﻿import { createFileRoute, Link } from "@tanstack/react-router";
 import { useState } from "react";
 import { SiteNav } from "@/components/site-nav";
 
@@ -57,7 +57,7 @@ function Hero() {
           </h1>
           <p className="gx-rise-2 mt-6 max-w-md text-sm leading-relaxed text-muted md:text-base">
             Цифровой холодильник: запишите, что есть дома — Gastronomix подберёт
-            блюда, посчитает КБЖУ и соберёт список покупок. Каталог из 55 рецептов,
+            блюда, посчитает КБЖУ и соберёт список покупок. Каталог из 100 рецептов,
             недельное меню и шеф-ИИ, который знает ваш холодильник.
           </p>
           <div className="gx-rise-3 mt-8 flex flex-wrap items-center gap-4">
@@ -137,7 +137,7 @@ function Showcase() {
           в каталоге
         </h2>
         <p className="mx-auto mt-4 max-w-md text-sm leading-relaxed text-muted">
-          55 блюд с КБЖУ и пошаговыми инструкциями. Внутри — фильтры по калориям
+          100 блюд с КБЖУ и пошаговыми инструкциями. Внутри — фильтры по калориям
           и времени, избранное и режим шеф-повара.
         </p>
       </div>

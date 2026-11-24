@@ -1167,7 +1167,11 @@ export const getShoppingList = createServerFn({ method: "GET" })
 
 /** Разбирает строку «200 г муки» или «мука — 200 г» на пару имя + количество. */
 function parseRawIngredient(raw: string): { name: string; amount: string } {
-  const text = raw.trim();
+  let text = raw
+    .replace(/=\s*\d+(?:[.,]\d+)?\s*(?:г|гр|мл|л|кг|шт)?\s*/gi, " ")
+    .replace(/[()]+/g, " ")
+    .replace(/\s{2,}/g, " ")
+    .trim();
   const match = text.match(
     /^(.*?)(\d+(?:[.,]\d+)?)\s*(г|гр|кг|мл|л|шт|ст\.?\s*л|ч\.?\s*л|стакан[a-z]*|ложки|ложек|щепотка|по вкусу)[\s.,]*/i,
   );
@@ -1177,8 +1181,18 @@ function parseRawIngredient(raw: string): { name: string; amount: string } {
   const amount = `${match[2].replace(",", ".")} ${unit}`;
   // Название — текст до количества или после него (какой не пустой).
   const after = text.slice((match.index ?? 0) + match[0].length).trim();
-  const name = (before.length >= after.length ? after : before) || before || "ингредиент";
-  return { name: name.replace(/[—–-]+$/, "").trim().slice(0, 80) || "ингредиент", amount };
+  let name = (before.length >= after.length ? after : before) || before || "ингредиент";
+  name = name
+    .replace(/[—–-]+$/, "")
+    .replace(/^[—–-]+/, "")
+    .replace(/\d+(?:[.,]\d+)?\s*(г|гр|мл|л|кг|шт|ст\.?\s*л|ч\.?\s*л)?\s*$/i, "")
+    .replace(/[;,]+$/, "")
+    .trim();
+  // Остался только мусор (числа/знаки) — ингредиент пропускаем.
+  if (name.replace(/[^a-zA-Zа-яА-ЯёЁ]/g, "").length < 2) {
+    return { name: "", amount: "" };
+  }
+  return { name: name.slice(0, 80), amount };
 }
 
 /**
@@ -1233,7 +1247,10 @@ export const importRecipeFromUrl = createServerFn({ method: "POST" })
       const rawIngredients = Array.isArray(recipe.recipeIngredient)
         ? (recipe.recipeIngredient as string[])
         : [];
-      const ingredients = rawIngredients.slice(0, 30).map(parseRawIngredient);
+      const ingredients = rawIngredients
+        .slice(0, 30)
+        .map(parseRawIngredient)
+        .filter((i) => i.name.length >= 2);
       if (!title || ingredients.length === 0) continue;
 
       let steps: string[] = [];

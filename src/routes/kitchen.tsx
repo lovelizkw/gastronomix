@@ -819,6 +819,7 @@ function RecipeList({
   }
 
   const hasFilters = Object.keys(filters).length > 0;
+  const catalogCount = useMemo(() => recipes.filter((r) => !r.userId).length, [recipes]);
   // Кухни как чипсы-категории (референс 3) — фильтр по уже загруженному списку.
   const [cuisine, setCuisine] = useState<string | null>(null);
   const cuisines = useMemo(
@@ -836,7 +837,8 @@ function RecipeList({
         РЕЦЕПТЫ
       </h1>
       <p className="mt-2 text-sm text-muted">
-        40 блюд в каталоге плюс ваши собственные. КБЖУ на порцию.
+        {catalogCount > 0 ? `${catalogCount}` : "Каталог"} блюд в каталоге плюс ваши
+        собственные. КБЖУ на порцию.
         {hidden > 0 ? (
           <>
             {" "}
@@ -950,7 +952,7 @@ function RecipeList({
               </p>
             </div>
           ) : (
-            <div className="mt-6 grid gap-5 sm:grid-cols-2 md:grid-cols-3 xl:grid-cols-4">
+            <div className="mt-6 grid grid-cols-[repeat(auto-fill,minmax(230px,1fr))] gap-5">
               {byCuisine.map((r) => (
             <article
               key={r.id}
